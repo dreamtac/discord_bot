@@ -1,17 +1,18 @@
 {
-    "name": "discord_bot",
+    "name": "modals",
     "version": "1.0.0",
     "main": "index.js",
+    "license": "MIT",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "dev": "node index.js"
+        "dev": "nodemon",
+        "start": "node ."
     },
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
-    "description": "",
     "dependencies": {
-        "discord.js": "^14.15.3",
-        "dotenv": "^16.4.5"
+        "discord.js": "^14.11.0",
+        "djs-commander": "^0.0.45",
+        "dotenv": "^16.0.3"
+    },
+    "devDependencies": {
+        "nodemon": "^2.0.22"
     }
 }
