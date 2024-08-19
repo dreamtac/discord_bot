@@ -12,12 +12,13 @@ const votingStatus = require('../votingStatus'); // votingStatus 모듈 불러�
 module.exports = {
     run: async ({ interaction }) => {
         if (!votingStatus.isVotingClosed()) {
-            interaction.reply({
+            await interaction.reply({
                 content: `투표가 이미 진행중입니다.\n'/종료' 를 입력해 진행중인 투표를 종료해주세요.`,
                 ephemeral: true,
             });
             return;
         }
+
         votingStatus.openVoting();
         const guild = interaction.guild;
         const members = await guild.members.fetch(); // 모든 멤버 정보를 가져옴
@@ -30,7 +31,7 @@ module.exports = {
             }
         });
 
-        console.log(votingStatus.getStatus());
+        // console.log(votingStatus.getStatus());
 
         // 모달 생성
         const modal = new ModalBuilder({

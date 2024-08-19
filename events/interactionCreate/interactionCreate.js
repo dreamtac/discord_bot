@@ -2,20 +2,27 @@ const { time } = require('discord.js');
 const votingStatus = require('../../votingStatus');
 
 module.exports = async interaction => {
-    // util.inspect를 사용해 객체를 보기 좋게 출력
-    // console.log('버튼 눌림', util.inspect(interaction, { showHidden: false, depth: null, colors: true }));
-    // console.log('버튼 눌림', interaction.user.username, interaction.customId);
+    if (!interaction.isButton()) {
+        console.log(
+            `투표시작 or 종료 : ${
+                (interaction.member.nickname ? interaction.member.nickname : interaction.user.username,
+                interaction.customId)
+            }`
+        );
+        return;
+    }
+    //버튼 누른 유저 확인용
     console.log(
         'nick:',
         interaction.member.nickname ? interaction.member.nickname : interaction.user.username,
         interaction.customId
     );
 
-    if (!interaction.isButton()) return;
-
+    await interaction.deferReply({ ephemeral: true }).catch(err => {
+        console.log(`버튼 이벤트 에러: ${err}`);
+        interaction.followUp({ content: '에러가 발생했습니다. 다시 시도해주세요.', ephemeral: true });
+    });
     const userId = interaction.member.nickname ? interaction.member.nickname : interaction.user.username;
-
-    await interaction.deferReply({ ephemeral: true });
 
     if (interaction.customId === 'btnFirstTrue') {
         //투표가 종료되었는지 체크
@@ -74,32 +81,16 @@ module.exports = async interaction => {
             content: `
 **투표 현황:(${result.voteRate})**
 
-**------- 우선참여: ${result.specialParticipated}명 --------**\n${numberedSpecialParticipants.join('\n')}\n
+**------- 우선참여: ${result.specialParticipated}명 --------**\n${numberedSpecialParticipants.join('\n')}
 
-**------- 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}\n
+**------- 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}
 
-**-------- 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}\n
+**-------- 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}
 
-**-------- 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}\n
+**-------- 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}
 `,
             ephemeral: true,
         });
-
-        //         const replyMessage = await interaction.reply({
-        //             content: `
-        // **투표 현황:(${result.voteRate})**
-
-        // **------- 우선참여: ${result.specialParticipated}명 --------**\n${numberedSpecialParticipants.join('\n')}\n
-
-        // **------- 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}\n
-
-        // **-------- 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}\n
-
-        // **-------- 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}\n
-        // `,
-        //             ephemeral: true,
-        //         });
         setTimeout(() => interaction.deleteReply(), 60000);
-        // setTimeout(()=>replyMessage.dele)
     }
 };
