@@ -8,10 +8,15 @@ module.exports = {
         if (!votingClosed) {
             votingStatus[userId] = status;
 
-            //배열에 유저가 존재하지 않으면 추가
-            if (!order.includes(userId)) {
-                order.push(userId);
+            //배열에 유저가 이미 존재한다면 삭제후 다시 추가
+            const existingIndex = order.indexOf(userId);
+            if (existingIndex !== -1) {
+                order.splice(existingIndex, 1);
             }
+            order.push(userId);
+            // if (!order.includes(userId)) {
+            //     order.push(userId);
+            // }
         }
     },
     openVoting: () => {
@@ -41,16 +46,6 @@ module.exports = {
                 participatedUser.push(userId);
             }
         });
-
-        // // 투표 상태가 '우선참여'인 유저 목록을 필터링
-        // const specialParticipatedUser = Object.entries(votingStatus)
-        //     .filter(([userId, status]) => status === '우선참여')
-        //     .map(([userId]) => userId); // 참여한 유저들의 ID 목록
-
-        // // 투표 상태가 '참여'인 유저 목록을 필터링
-        // const participatedUser = Object.entries(votingStatus)
-        //     .filter(([userId, status]) => status === '참여')
-        //     .map(([userId]) => userId); // 참여한 유저들의 ID 목록
 
         // 투표 상태가 '불참'인 유저 목록을 필터링
         const notParticipatedUser = Object.entries(votingStatus)

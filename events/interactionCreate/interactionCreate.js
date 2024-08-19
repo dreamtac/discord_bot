@@ -1,3 +1,4 @@
+const { time } = require('discord.js');
 const votingStatus = require('../../votingStatus');
 
 module.exports = async interaction => {
@@ -18,28 +19,34 @@ module.exports = async interaction => {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
             await interaction.reply({ content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`, ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
             return;
         } else {
             votingStatus.setStatus(userId, '우선참여');
             await interaction.reply({ content: '우선참여로 기록되었습니다.', ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnTrue') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
             await interaction.reply({ content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`, ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
             return;
         } else {
             votingStatus.setStatus(userId, '참여');
             await interaction.reply({ content: '참여로 기록되었습니다.', ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnFalse') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
             await interaction.reply({ content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`, ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
             return;
         } else {
             votingStatus.setStatus(userId, '불참');
             await interaction.reply({ content: '불참으로 기록되었습니다.', ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnResult') {
         const result = votingStatus.getResult();
@@ -48,7 +55,11 @@ module.exports = async interaction => {
             (user, index) => `${index + 1 + numberedSpecialParticipants.length}. ${user}`
         );
 
-        await interaction.reply({
+        //불참, 미투표자는 알파벳순으로
+        let sortedNotParticipatedUser = result.notParticipatedUser.sort();
+        let sortedNotVotedUser = result.notVotedUser.sort();
+
+        const replyMessage = await interaction.reply({
             content: `
 **투표 현황:(${result.voteRate})**
 
@@ -56,11 +67,13 @@ module.exports = async interaction => {
 
 **------- 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}\n
 
-**-------- 불참: ${result.notParticipated}명 --------**\n${result.notParticipatedUser.join('\n')}\n
+**-------- 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}\n
 
-**-------- 미투표: ${result.notVoted}명 --------**\n${result.notVotedUser.join('\n')}\n
+**-------- 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}\n
 `,
             ephemeral: true,
         });
+        setTimeout(() => interaction.deleteReply(), 60000);
+        // setTimeout(()=>replyMessage.dele)
     }
 };

@@ -20,3 +20,7 @@ new CommandHandler({
 });
 
 client.login(process.env.DICO_TOKEN);
+
+client.on('messageCreate', msg => {
+    console.log(`${msg.author.username} : ${msg.content}`);
+});
