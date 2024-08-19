@@ -15,37 +15,48 @@ module.exports = async interaction => {
 
     const userId = interaction.member.nickname ? interaction.member.nickname : interaction.user.username;
 
+    await interaction.deferReply({ ephemeral: true });
+
     if (interaction.customId === 'btnFirstTrue') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
-            await interaction.reply({ content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`, ephemeral: true });
+            await interaction.editReply({
+                content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                ephemeral: true,
+            });
             setTimeout(() => interaction.deleteReply(), 5000);
             return;
         } else {
             votingStatus.setStatus(userId, '우선참여');
-            await interaction.reply({ content: '우선참여로 기록되었습니다.', ephemeral: true });
+            await interaction.editReply({ content: '우선참여로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnTrue') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
-            await interaction.reply({ content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`, ephemeral: true });
+            await interaction.editReply({
+                content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                ephemeral: true,
+            });
             setTimeout(() => interaction.deleteReply(), 5000);
             return;
         } else {
             votingStatus.setStatus(userId, '참여');
-            await interaction.reply({ content: '참여로 기록되었습니다.', ephemeral: true });
+            await interaction.editReply({ content: '참여로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnFalse') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
-            await interaction.reply({ content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`, ephemeral: true });
+            await interaction.editReply({
+                content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                ephemeral: true,
+            });
             setTimeout(() => interaction.deleteReply(), 5000);
             return;
         } else {
             votingStatus.setStatus(userId, '불참');
-            await interaction.reply({ content: '불참으로 기록되었습니다.', ephemeral: true });
+            await interaction.editReply({ content: '불참으로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnResult') {
@@ -59,7 +70,7 @@ module.exports = async interaction => {
         let sortedNotParticipatedUser = result.notParticipatedUser.sort();
         let sortedNotVotedUser = result.notVotedUser.sort();
 
-        const replyMessage = await interaction.reply({
+        await interaction.editReply({
             content: `
 **투표 현황:(${result.voteRate})**
 
@@ -73,6 +84,21 @@ module.exports = async interaction => {
 `,
             ephemeral: true,
         });
+
+        //         const replyMessage = await interaction.reply({
+        //             content: `
+        // **투표 현황:(${result.voteRate})**
+
+        // **------- 우선참여: ${result.specialParticipated}명 --------**\n${numberedSpecialParticipants.join('\n')}\n
+
+        // **------- 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}\n
+
+        // **-------- 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}\n
+
+        // **-------- 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}\n
+        // `,
+        //             ephemeral: true,
+        //         });
         setTimeout(() => interaction.deleteReply(), 60000);
         // setTimeout(()=>replyMessage.dele)
     }
