@@ -1,21 +1,22 @@
-const { time } = require('discord.js');
 const votingStatus = require('../../votingStatus');
 
 module.exports = async interaction => {
+    const moment = require('moment-timezone');
+    const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
     if (!interaction.isButton()) {
-        console.log(
-            `투표시작 or 종료 : ${
-                (interaction.member.nickname ? interaction.member.nickname : interaction.user.username,
-                interaction.customId)
-            }`
-        );
+        // console.log(
+        //     `투표시작 or 종료 : ${
+        //         (interaction.member.nickname ? interaction.member.nickname : interaction.user.username,
+        //         interaction.customId)
+        //     }`
+        // );
         return;
     }
     //버튼 누른 유저 확인용
     console.log(
-        'nick:',
-        interaction.member.nickname ? interaction.member.nickname : interaction.user.username,
-        interaction.customId
+        `${interaction.member.nickname ? interaction.member.nickname : interaction.user.username} : ${
+            interaction.customId
+        } - ${krTime}`
     );
 
     await interaction.deferReply({ ephemeral: true }).catch(err => {
@@ -27,6 +28,7 @@ module.exports = async interaction => {
     if (interaction.customId === 'btnFirstTrue') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
+            console.log(`투표 종료로 요청 거절됨`);
             await interaction.editReply({
                 content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
                 ephemeral: true,
@@ -41,6 +43,7 @@ module.exports = async interaction => {
     } else if (interaction.customId === 'btnTrue') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
+            console.log(`투표 종료로 요청 거절됨`);
             await interaction.editReply({
                 content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
                 ephemeral: true,
@@ -55,6 +58,7 @@ module.exports = async interaction => {
     } else if (interaction.customId === 'btnFalse') {
         //투표가 종료되었는지 체크
         if (votingStatus.isVotingClosed()) {
+            console.log(`투표 종료로 요청 거절됨`);
             await interaction.editReply({
                 content: `투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
                 ephemeral: true,
@@ -68,16 +72,18 @@ module.exports = async interaction => {
         }
     } else if (interaction.customId === 'btnResult') {
         const result = votingStatus.getResult();
-        let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => `${index + 1}. ${user}`);
+        let numberedSpecialParticipants = result.specialParticipatedUser.map(
+            (user, index) => `*${index + 1}번*  ${user}`
+        );
         let numberedParticipants = result.participatedUser.map(
-            (user, index) => `${index + 1 + numberedSpecialParticipants.length}. ${user}`
+            (user, index) => `*${index + 1 + numberedSpecialParticipants.length}번*  ${user}`
         );
 
         //불참, 미투표자는 알파벳순으로
         let sortedNotParticipatedUser = result.notParticipatedUser.sort();
         let sortedNotVotedUser = result.notVotedUser.sort();
 
-        await interaction.editReply({
+        const replyMessage = await interaction.editReply({
             content: `
 **투표 현황:(${result.voteRate})**
 
@@ -91,6 +97,11 @@ module.exports = async interaction => {
 `,
             ephemeral: true,
         });
+        // console.log(`우선참여: ${numberedSpecialParticipants}`);
+        // console.log(`참여: ${numberedParticipants}`);
+        // console.log(`불참: ${sortedNotParticipatedUser}`);
+        // console.log(`미투표: ${sortedNotVotedUser}`);
+        // console.log(replyMessage.content);
         setTimeout(() => interaction.deleteReply(), 60000);
     }
 };
