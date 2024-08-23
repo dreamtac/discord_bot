@@ -49,7 +49,6 @@ module.exports = {
                                 { upsert: true, new: true }
                             );
                         } else if (status === '불참' || status === '미투표') {
-                            console.log('미투표로 추가됨');
                             if (existingIndex !== -1) {
                                 order[existingIndex] = null;
                             }

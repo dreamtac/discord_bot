@@ -146,51 +146,38 @@ module.exports = async interaction => {
         interaction.customId === 'btnTrue' ||
         interaction.customId === 'btnFalse'
     ) {
+        // 역할이 용병인지 체크
+        if (interaction.member.roles.cache.some(role => role.name === '용병')) {
+            console.log('용병 투표 거절됨');
+            await interaction.editReply({
+                content: `❌ 용병은 투표에 참여할 수 없습니다.`,
+                ephemeral: true,
+            });
+            setTimeout(() => interaction.deleteReply(), 5000);
+            return;
+        }
+        //투표가 종료되었는지 체크
+        if (votingStatus.isVotingClosed()) {
+            console.log(`투표 종료로 요청 거절됨`);
+            await interaction.editReply({
+                content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                ephemeral: true,
+            });
+            setTimeout(() => interaction.deleteReply(), 5000);
+            return;
+        }
         if (interaction.customId === 'btnFirstTrue') {
-            //투표가 종료되었는지 체크
-            if (votingStatus.isVotingClosed()) {
-                console.log(`투표 종료로 요청 거절됨`);
-                await interaction.editReply({
-                    content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                    ephemeral: true,
-                });
-                setTimeout(() => interaction.deleteReply(), 5000);
-                return;
-            } else {
-                votingStatus.setStatus(userId, '우선참여');
-                await interaction.editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true });
-                setTimeout(() => interaction.deleteReply(), 5000);
-            }
+            votingStatus.setStatus(userId, '우선참여');
+            await interaction.editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
         } else if (interaction.customId === 'btnTrue') {
-            //투표가 종료되었는지 체크
-            if (votingStatus.isVotingClosed()) {
-                console.log(`투표 종료로 요청 거절됨`);
-                await interaction.editReply({
-                    content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                    ephemeral: true,
-                });
-                setTimeout(() => interaction.deleteReply(), 5000);
-                return;
-            } else {
-                votingStatus.setStatus(userId, '참여');
-                await interaction.editReply({ content: '✅ 참여로 기록되었습니다.', ephemeral: true });
-                setTimeout(() => interaction.deleteReply(), 5000);
-            }
+            votingStatus.setStatus(userId, '참여');
+            await interaction.editReply({ content: '✅ 참여로 기록되었습니다.', ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
         } else if (interaction.customId === 'btnFalse') {
-            //투표가 종료되었는지 체크
-            if (votingStatus.isVotingClosed()) {
-                console.log(`투표 종료로 요청 거절됨`);
-                await interaction.editReply({
-                    content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                    ephemeral: true,
-                });
-                setTimeout(() => interaction.deleteReply(), 5000);
-                return;
-            } else {
-                votingStatus.setStatus(userId, '불참');
-                await interaction.editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true });
-                setTimeout(() => interaction.deleteReply(), 5000);
-            }
+            votingStatus.setStatus(userId, '불참');
+            await interaction.editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true });
+            setTimeout(() => interaction.deleteReply(), 5000);
         }
     } else if (interaction.customId === 'btnResult') {
         const result = votingStatus.getResult();

@@ -60,9 +60,10 @@ module.exports = {
                 votingStatus.openVoting(); //투표 상태를 진행으로 변경
                 const guild = interaction.guild;
                 const members = await guild.members.fetch(); // 모든 멤버 정보를 가져옴
+                const ignoreRoleId = '용병'; //용병 역할을 가진 유저를 걸러내기 위한 변수
                 // 모든 멤버의 상태를 '미투표'로 초기화
                 members.forEach(member => {
-                    if (!member.user.bot) {
+                    if (!member.roles.cache.some(role => role.name === '용병') && !member.user.bot) {
                         // 봇은 제외
                         votingStatus.setStatus(member.nickname ? member.nickname : member.user.username, '미투표');
                     }
