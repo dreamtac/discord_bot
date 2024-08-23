@@ -6,70 +6,118 @@ let votingStatus = {}; // 각 유저별 투표 상태를 저장할 객체
 let order = []; // 투표 순서 기록용 배열
 let votingClosed = true; // 투표 종료 상태를 관리하는 변수
 
+let queue = [];
+let queueRunning = false;
+
+// 큐에 있는 작업들(task) 가 0개가 될 때까지 하나씩 꺼내서 실행.
+// 작업들은 유저가 우선참여, 참여, 불참 버튼을 눌렀을때 수행하는 작업들을 의미.
+const runQueue = async () => {
+    while (queue.length > 0) {
+        // console.log('큐 작업중...');
+        const task = queue.shift();
+        await task();
+    }
+    queueRunning = false;
+};
+
 module.exports = {
     getStatus: () => votingStatus,
     setStatus: async (userId, status) => {
         if (!votingClosed) {
-            votingStatus[userId] = status;
-            const existingIndex = order.indexOf(userId);
+            // console.log('큐에 작업 추가 중...');
+            await new Promise(resolve => {
+                queue.push(async () => {
+                    try {
+                        // console.log('Processing queue task for: ', userId);
+                        votingStatus[userId] = status;
+                        const existingIndex = order.indexOf(userId);
 
-            if (status === '우선참여' || status === '참여') {
-                // 참여 상태라면 order에 추가
-                if (existingIndex === -1) {
-                    //유저가 아직 order배열에 없을 때만 order에 추가
-                    order.push(userId);
-                    // order.splice(existingIndex, 1);
-                } else {
-                    order[existingIndex] = null;
-                    order.push(userId);
+                        if (status === '우선참여' || status === '참여') {
+                            if (existingIndex === -1) {
+                                order.push(userId);
+                            } else {
+                                order[existingIndex] = null;
+                                order.push(userId);
+                            }
+
+                            const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+                            let number = order.length;
+
+                            await MemberDB.findOneAndUpdate(
+                                { nickName: userId },
+                                { status, number: number, date: krTime },
+                                { upsert: true, new: true }
+                            );
+                        } else if (status === '불참' || status === '미투표') {
+                            console.log('미투표로 추가됨');
+                            if (existingIndex !== -1) {
+                                order[existingIndex] = null;
+                            }
+                            const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+                            await MemberDB.findOneAndUpdate(
+                                { nickName: userId },
+                                { status, number: null, date: krTime },
+                                { upsert: true, new: true }
+                            );
+                        }
+                    } catch (err) {
+                        console.error('Error processing task:', err);
+                    } finally {
+                        // console.log('작업 완료');
+                        resolve();
+                    }
+                });
+
+                // console.log('queue:', queue);
+                // console.log('큐 실행 준비 중...');
+                if (!queueRunning) {
+                    // console.log('큐 실행 시작');
+                    queueRunning = true;
+                    runQueue();
                 }
-
-                const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-
-                let memberDoc = await MemberDB.findOne({ nickName: userId });
-                let number;
-
-                // if (memberDoc && memberDoc.number) {
-                //     number = memberDoc.number;
-                // } else {
-                //     number = order.length;
-                // }
-
-                number = order.length;
-
-                await MemberDB.findOneAndUpdate(
-                    { nickName: userId },
-                    { status, number: number, date: krTime },
-                    { upsert: true, new: true }
-                );
-            } else if (status === '불참' || status === '미투표') {
-                //불참 또는 미투표 상태라면 order를 null로 변경, number = null로 설정
-                if (existingIndex !== -1) {
-                    order[existingIndex] = null; //기존 위치를 null로 표시
-                    // order.splice(existingIndex,1);
-                }
-                const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-                await MemberDB.findOneAndUpdate(
-                    { nickName: userId },
-                    { status, number: null, date: krTime },
-                    { upsert: true, new: true }
-                );
-            }
+            });
         }
     },
-
     openVoting: async () => {
-        votingClosed = false;
-        order = [];
-        await MemberDB.deleteMany({}); //기존 투표 데이터 db에서 삭제
-        await VotingState.findOneAndUpdate({}, { closed: false }, { upsert: true });
+        //************초기화 코드************//
+        order = []; //기존 배열 초기화
+        votingStatus = {}; // 유저별 투표 상태 초기화
+        queue = []; //비동기 작업 큐 초기화
+        queueRunning = false; // 큐 작업 상태 초기화
+        votingClosed = true; // 투표 종료 상태로 초기화
+
+        await MemberDB.collection.drop(); //컬렉션 삭제
+        await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
+
         const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+        console.log(`투표 데이터 초기화 완료! - ${krTime}`);
+        //************초기화 코드************//
+
+        votingClosed = false;
+        // order = []; //기존 배열 초기화
+        // await MemberDB.deleteMany({}); //기존 투표 데이터 db에서 삭제
+        await VotingState.findOneAndUpdate({}, { closed: false }, { upsert: true }); // db 투표 진행 상황 초기화
         console.log(`투표 시작됨! - ${krTime}`);
+    },
+    initData: async () => {
+        order = []; //기존 배열 초기화
+        votingStatus = {}; // 유저별 투표 상태 초기화
+        queue = []; //비동기 작업 큐 초기화
+        queueRunning = false; // 큐 작업 상태 초기화
+        votingClosed = true; // 투표 종료 상태로 초기화
+
+        await MemberDB.collection.drop(); //컬렉션 삭제
+        await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
+
+        const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+        console.log(`투표 데이터 초기화 완료! - ${krTime}`);
     },
     closeVoting: async () => {
         await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
-        console.log('투표 종료됨!');
-        return (votingClosed = true);
+        const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+        console.log(`투표 종료됨! - ${krTime}`);
+        votingClosed = true;
+        // return (votingClosed = true);
     },
     isVotingClosed: () => {
         return votingClosed;
