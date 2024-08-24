@@ -57,7 +57,7 @@ module.exports = {
         interaction
             .awaitModalSubmit({ filter, time: 600000 })
             .then(async modalInteraction => {
-                votingStatus.openVoting(); //투표 상태를 진행으로 변경
+                await votingStatus.openVoting(); //투표 상태를 진행으로 변경
                 const guild = interaction.guild;
                 const members = await guild.members.fetch(); // 모든 멤버 정보를 가져옴
                 const ignoreRoleId = '용병'; //용병 역할을 가진 유저를 걸러내기 위한 변수

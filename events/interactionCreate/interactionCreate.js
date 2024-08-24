@@ -185,11 +185,13 @@ module.exports = async interaction => {
         let numberedParticipants = result.participatedUser.map(
             (user, index) => `${index + 1 + numberedSpecialParticipants.length}. ${user}`
         );
+
+        //불참, 미투표자는 알파벳순으로
         let sortedNotParticipatedUser = result.notParticipatedUser.sort();
         let sortedNotVotedUser = result.notVotedUser.sort();
 
-        const myVote = votingStatus.getStatus()[userId] || '미투표';
-        let myNumber = null;
+        const myVote = votingStatus.getStatus()[userId] || '미투표'; //나의 투표 상황
+        let myNumber = null; //나의 투표 순번
 
         if (myVote === '우선참여') {
             myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
@@ -200,51 +202,68 @@ module.exports = async interaction => {
                 1;
         }
 
-        const embed = new EmbedBuilder()
-            .setColor('#0099ff')
-            .setTitle(`투표 현황 (${result.voteRate})`)
-            .setDescription(
-                `${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumber || '없음'}*** 입니다.`
-            )
-            .addFields(
-                {
-                    name: `🟢 우선참여 (${result.specialParticipated}명)`,
-                    value: numberedSpecialParticipants.join('\n') || '없음',
-                    inline: false,
-                },
-                {
-                    name: '\u200B', // 빈 줄 추가
-                    value: '\u200B',
-                    inline: false,
-                },
-                {
-                    name: `🔵 참여 (${result.participated}명)`,
-                    value: numberedParticipants.join('\n') || '없음',
-                    inline: false,
-                },
-                {
-                    name: '\u200B', // 빈 줄 추가
-                    value: '\u200B',
-                    inline: false,
-                },
-                {
-                    name: `🔴 불참 (${result.notParticipated}명)`,
-                    value: sortedNotParticipatedUser.join('\n') || '없음',
-                    inline: false,
-                },
-                {
-                    name: '\u200B', // 빈 줄 추가
-                    value: '\u200B',
-                    inline: false,
-                },
-                {
-                    name: `❔ 미투표 (${result.notVoted}명)`,
-                    value: sortedNotVotedUser.join('\n') || '없음',
-                    inline: false,
-                }
-            );
+        await interaction.editReply({
+            content: `
+**투표 현황:(${result.voteRate})**
+${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumber || '없음'}*** 입니다.
 
-        await interaction.editReply({ embeds: [embed], ephemeral: true });
+**------- 🟢 우선참여: ${result.specialParticipated}명 --------**\n${numberedSpecialParticipants.join('\n')}
+
+**------- 🔵 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}
+
+**-------- 🔴 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}
+
+**-------- ❔ 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}
+`,
+            // ephemeral: true,
+        });
         setTimeout(() => interaction.deleteReply(), 60000);
+
+        // const embed = new EmbedBuilder()
+        //     .setColor('#0099ff')
+        //     .setTitle(`투표 현황 (${result.voteRate})`)
+        //     .setDescription(
+        //         `${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumber || '없음'}*** 입니다.`
+        //     )
+        //     .addFields(
+        //         {
+        //             name: `🟢 우선참여 (${result.specialParticipated}명)`,
+        //             value: numberedSpecialParticipants.join('\n') || '없음',
+        //             inline: false,
+        //         },
+        //         {
+        //             name: '\u200B', // 빈 줄 추가
+        //             value: '\u200B',
+        //             inline: false,
+        //         },
+        //         {
+        //             name: `🔵 참여 (${result.participated}명)`,
+        //             value: numberedParticipants.join('\n') || '없음',
+        //             inline: false,
+        //         },
+        //         {
+        //             name: '\u200B', // 빈 줄 추가
+        //             value: '\u200B',
+        //             inline: false,
+        //         },
+        //         {
+        //             name: `🔴 불참 (${result.notParticipated}명)`,
+        //             value: sortedNotParticipatedUser.join('\n') || '없음',
+        //             inline: false,
+        //         },
+        //         {
+        //             name: '\u200B', // 빈 줄 추가
+        //             value: '\u200B',
+        //             inline: false,
+        //         },
+        //         {
+        //             name: `❔ 미투표 (${result.notVoted}명)`,
+        //             value: sortedNotVotedUser.join('\n') || '없음',
+        //             inline: false,
+        //         }
+        //     );
+
+        // await interaction.editReply({ embeds: [embed], ephemeral: true });
+        // setTimeout(() => interaction.deleteReply(), 60000);
     }
 };
