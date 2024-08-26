@@ -45,6 +45,22 @@ module.exports = async interaction => {
             setTimeout(() => interaction.deleteReply(), 5000);
             return;
         }
+        //동일한 상태로 투표하려는지 체크 (참여 -> 참여, 우선참여 -> 우선참여)
+        const currentStatus = votingStatus.getStatus()[userId]; //유저의 현재 상태 가져오기
+        if (
+            (interaction.customId === 'btnFirstTrue' && currentStatus === '우선참여') ||
+            (interaction.customId === 'btnTrue' && currentStatus === '참여') ||
+            (interaction.customId === 'btnFalse' && currentStatus === '불참')
+        ) {
+            console.log(`${userId} 유저가 이미 동일한 상태로 투표했습니다.`);
+            await interaction.editReply({
+                content: `❌ 이미 "${currentStatus}" 상태로 투표했습니다. 다른 상태로 변경하려면 다시 선택하세요.`,
+                ephemeral: true,
+            });
+            setTimeout(() => interaction.deleteReply(), 5000);
+            return; // 동일한 상태로 투표한 경우 함수 종료
+        }
+
         if (interaction.customId === 'btnFirstTrue') {
             votingStatus.setStatus(userId, '우선참여');
             await interaction.editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true });
@@ -58,18 +74,16 @@ module.exports = async interaction => {
             await interaction.editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         }
-    } else if (interaction.customId === 'btnResult') {
+    } else if (interaction.customId === 'btnResultParticipated') {
+        // 우선참여와 참여자만 보이기
         const result = votingStatus.getResult();
         let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => `${index + 1}. ${user}`);
         let numberedParticipants = result.participatedUser.map(
             (user, index) => `${index + 1 + numberedSpecialParticipants.length}. ${user}`
         );
-        //불참, 미투표자는 알파벳순으로
-        let sortedNotParticipatedUser = result.notParticipatedUser.sort();
-        let sortedNotVotedUser = result.notVotedUser.sort();
 
-        const myVote = votingStatus.getStatus()[userId] || '미투표'; //나의 투표 상황
-        let myNumber = null; //나의 투표 순번
+        const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
+        let myNumber = null; // 나의 투표 순번
 
         if (myVote === '우선참여') {
             myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
@@ -80,53 +94,80 @@ module.exports = async interaction => {
                 1;
         }
 
-        // 메시지를 여러 조각으로 나누는 함수
-        const splitLongMessage = message => {
-            const messages = [];
-            let currentMessage = '';
-            const lines = message.split('\n');
-
-            lines.forEach(line => {
-                if ((currentMessage + line).length > 2000) {
-                    messages.push(currentMessage);
-                    currentMessage = line + '\n';
-                } else {
-                    currentMessage += line + '\n';
-                }
-            });
-
-            if (currentMessage) messages.push(currentMessage);
-            return messages;
-        };
-
-        const fullMessage = `
+        const messageContent = `
 **투표 현황:(${result.voteRate})**
 ${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumber || '없음'}*** 입니다.
 
 **------- 🟢 우선참여: ${result.specialParticipated}명 --------**\n${numberedSpecialParticipants.join('\n')}
 
 **------- 🔵 참여: ${result.participated}명 --------**\n${numberedParticipants.join('\n')}
+`;
+
+        sendPaginatedMessages(interaction, messageContent);
+    } else if (interaction.customId === 'btnResultNotParticipated') {
+        // 불참자와 미투표자만 보이기
+        const result = votingStatus.getResult();
+        let sortedNotParticipatedUser = result.notParticipatedUser.sort();
+        let sortedNotVotedUser = result.notVotedUser.sort();
+
+        const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
+
+        const messageContent = `
+**투표 현황:(${result.voteRate})**
+${userId}님의 투표 상태는 *** ${myVote} *** 입니다.
 
 **-------- 🔴 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}
 
 **-------- ❔ 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}
 `;
 
-        // 메시지 나누기
-        const messages = splitLongMessage(fullMessage);
-
-        // 첫 번째 메시지는 editReply로 보냄
-        await interaction.editReply({ content: messages[0], ephemeral: true });
-
-        // 나머지 메시지는 followUp으로 보냄
-        for (let i = 1; i < messages.length; i++) {
-            await interaction.followUp({ content: messages[i], ephemeral: true });
-        }
-
-        setTimeout(() => interaction.deleteReply(), 60000);
+        sendPaginatedMessages(interaction, messageContent);
     }
 };
 
+// 메시지를 여러 조각으로 나누는 함수
+const sendPaginatedMessages = async (interaction, message) => {
+    const messages = splitLongMessage(message);
+
+    // 첫 번째 메시지는 editReply로 보냄
+    await interaction.editReply({ content: messages[0], ephemeral: true });
+
+    // 나머지 메시지는 followUp으로 보냄
+    for (let i = 1; i < messages.length; i++) {
+        await interaction.followUp({ content: messages[i], ephemeral: true });
+    }
+
+    setTimeout(() => interaction.deleteReply(), 60000);
+};
+
+// 메시지를 2000자 이하로 분할하는 함수
+const splitLongMessage = message => {
+    const messages = [];
+    let currentMessage = '';
+    const lines = message.split('\n');
+
+    lines.forEach(line => {
+        if ((currentMessage + line).length > 2000) {
+            // 문자열이 2000자가 넘어가면 messages 배열에 넣기
+            messages.push(currentMessage);
+            // currentMessage 초기화, 다시 한 줄 한 줄 넣기
+            currentMessage = line + '\n';
+        } else {
+            // 기존 currentMessage에 현재 라인 추가
+            currentMessage += line + '\n';
+        }
+    });
+
+    if (currentMessage) messages.push(currentMessage);
+    return messages;
+};
+
+//     else if (interaction.customId === 'btnResult') {
+//         const result = votingStatus.getResult();
+//         let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => `${index + 1}. ${user}`);
+//         let numberedParticipants = result.participatedUser.map(
+//             (user, index) => `${index + 1 + numberedSpecialParticipants.length}. ${user}`
+//         );
 //         //불참, 미투표자는 알파벳순으로
 //         let sortedNotParticipatedUser = result.notParticipatedUser.sort();
 //         let sortedNotVotedUser = result.notVotedUser.sort();
@@ -143,8 +184,29 @@ ${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumb
 //                 1;
 //         }
 
-//         await interaction.editReply({
-//             content: `
+//         // 메시지를 여러 조각으로 나누는 함수
+//         const splitLongMessage = message => {
+//             const messages = [];
+//             let currentMessage = '';
+//             const lines = message.split('\n');
+
+//             lines.forEach(line => {
+//                 if ((currentMessage + line).length > 2000) {
+//                     //문자열이 2000자가 넘어가면 massages 배열에 넣기
+//                     messages.push(currentMessage);
+//                     //currentMessage 초기화, 다시 한줄한줄 넣기.
+//                     currentMessage = line + '\n';
+//                 } else {
+//                     //기존 currentMessage 에 현재 라인 추가
+//                     currentMessage += line + '\n';
+//                 }
+//             });
+
+//             if (currentMessage) messages.push(currentMessage);
+//             return messages;
+//         };
+
+//         const fullMessage = `
 // **투표 현황:(${result.voteRate})**
 // ${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumber || '없음'}*** 입니다.
 
@@ -155,9 +217,19 @@ ${userId}님의 투표 상태는 *** ${myVote} *** 이며, 순번은 ***${myNumb
 // **-------- 🔴 불참: ${result.notParticipated}명 --------**\n${sortedNotParticipatedUser.join('\n')}
 
 // **-------- ❔ 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}
-// `,
-//             // ephemeral: true,
-//         });
+// `;
+
+//         // 메시지 나누기
+//         const messages = splitLongMessage(fullMessage);
+
+//         // 첫 번째 메시지는 editReply로 보냄
+//         await interaction.editReply({ content: messages[0], ephemeral: true });
+
+//         // 나머지 메시지는 followUp으로 보냄
+//         for (let i = 1; i < messages.length; i++) {
+//             await interaction.followUp({ content: messages[i], ephemeral: true });
+//         }
+
 //         setTimeout(() => interaction.deleteReply(), 60000);
 //     }
 // };

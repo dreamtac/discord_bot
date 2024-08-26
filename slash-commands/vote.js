@@ -85,11 +85,15 @@ module.exports = {
                     .setCustomId('btnFalse')
                     .setStyle(ButtonStyle.Danger);
                 const button3 = new ButtonBuilder()
-                    .setLabel('투표 현황')
-                    .setCustomId('btnResult')
+                    .setLabel('참여 현황')
+                    .setCustomId('btnResultParticipated')
+                    .setStyle(ButtonStyle.Secondary);
+                const button4 = new ButtonBuilder()
+                    .setLabel('불참/미투표 현황')
+                    .setCustomId('btnResultNotParticipated')
                     .setStyle(ButtonStyle.Secondary);
 
-                const buttons = new ActionRowBuilder().addComponents(button, button1, button2, button3);
+                const buttons = new ActionRowBuilder().addComponents(button, button1, button2, button3, button4);
 
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
