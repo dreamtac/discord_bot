@@ -20,9 +20,9 @@ async function connectDB() {
         await mongoose.connect(process.env.DB_URI, {
             dbName: process.env.NODE_ENV === 'development' ? 'testDB' : 'productionDB',
         });
-        await votingStatus.restoreVotingStatus();
-        console.log('Connected to mongoDB');
         client.login(process.env.NODE_ENV === 'development' ? process.env.DICO_TOKEN_TEST : process.env.DICO_TOKEN);
+        await votingStatus.restoreVotingStatus(client);
+        console.log('Connected to mongoDB');
     } catch (err) {
         console.log(`Error connecting to DB: ${err}`);
     }

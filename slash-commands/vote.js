@@ -69,6 +69,7 @@ module.exports = {
                     }
                 });
 
+                const result = votingStatus.getResult(); // 투표 결과를 가져옴
                 const date = modalInteraction.fields.getTextInputValue('inputDate');
                 const description = modalInteraction.fields.getTextInputValue('inputDescription');
 
@@ -98,12 +99,28 @@ module.exports = {
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
                     .setTitle('공성/거점 투표')
-                    .addFields({ name: '일시', value: date })
-                    .addFields({ name: '안내 사항', value: description })
+                    .addFields(
+                        { name: '일시', value: date },
+                        { name: '안내 사항', value: description },
+                        {
+                            name: '참여 현황',
+                            value: `
+                            🟢 우선참여: ${result.specialParticipated}명
+                            🔵 참여: ${result.participated}명
+                            🔴 불참: ${result.notParticipated}명
+                            ❔ 미투표: ${result.notVoted}명
+                            `,
+                        }
+                    )
                     .setFooter({ text: '• 상호작용 실패 문구가 뜨면 잠시후(10초) 다시 시도해 주세요 •' });
-                // .setDescription(description);
 
-                await modalInteraction.reply({ embeds: [embed], components: [buttons] });
+                // 메시지 객체 저장
+                const message = await modalInteraction.reply({
+                    embeds: [embed],
+                    components: [buttons],
+                    fetchReply: true, // 메시지 객체 반환
+                });
+                votingStatus.setMessage(message); // 메시지 저장
             })
             .catch(err => {
                 console.log(`Error: ${err}`);

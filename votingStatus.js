@@ -1,3 +1,4 @@
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const MemberDB = require('./models/memberDB');
 const VotingState = require('./models/votingStateDB');
 const moment = require('moment-timezone');
@@ -8,6 +9,7 @@ let votingClosed = true; // 투표 종료 상태를 관리하는 변수
 
 let queue = [];
 let queueRunning = false;
+let votingMessage = null;
 
 // 큐에 있는 작업들(task) 가 0개가 될 때까지 하나씩 꺼내서 실행.
 // 작업들은 유저가 우선참여, 참여, 불참 버튼을 눌렀을때 수행하는 작업들을 의미.
@@ -21,6 +23,13 @@ const runQueue = async () => {
 };
 
 module.exports = {
+    setMessage: async message => {
+        // todo: db에 객체 저장
+        votingMessage = message;
+        // console.log(votingMessage);
+        await VotingState.findOneAndUpdate({}, { closed: false }, { upsert: true });
+    },
+    getMessage: () => votingMessage,
     getStatus: () => votingStatus,
     setStatus: async (userId, status) => {
         if (!votingClosed) {
@@ -165,22 +174,81 @@ module.exports = {
     },
 
     //서버 재시작 시 투표 상태 복원
-    restoreVotingStatus: async () => {
+    restoreVotingStatus: async client => {
         const votingState = await VotingState.findOne({});
         if (votingState && !votingState.closed) {
             votingClosed = false; //투표가 종료되지 않았다면 투표를 자동으로 활성화 상태로 변경
+            const embed = new EmbedBuilder().setColor(0x0099ff);
+            const statuses = await MemberDB.find({}).sort({ number: 1 });
+            order = [];
+            statuses.forEach(doc => {
+                console.log(`재부팅..:`, `${doc.nickName} ${doc.status} ${doc.number}`);
+                votingStatus[doc.nickName] = doc.status;
+                if (doc.status === '우선참여' || doc.status === '참여') {
+                    console.log(`order 배열에 추가...`);
+                    order[doc.number - 1] = doc.nickName;
+                }
+                console.log('재부팅 order: ', order);
+                // order[doc.number - 1] = doc.nickName;
+            });
+            await restoreVotingStatus(client);
         }
-        const statuses = await MemberDB.find({}).sort({ number: 1 });
-        order = [];
-        statuses.forEach(doc => {
-            console.log(`재부팅..:`, `${doc.nickName} ${doc.status} ${doc.number}`);
-            votingStatus[doc.nickName] = doc.status;
-            if (doc.status === '우선참여' || doc.status === '참여') {
-                console.log(`order 배열에 추가...`);
-                order[doc.number - 1] = doc.nickName;
-            }
-            console.log('재부팅 order: ', order);
-            // order[doc.number - 1] = doc.nickName;
-        });
     },
 };
+
+async function restoreVotingStatus(client) {
+    const embed = new EmbedBuilder()
+        .setColor(0x0099ff)
+        .setTitle('공성/거점 투표')
+        .addFields(
+            { name: '일시', value: '서버 재시작 후 투표 복구됨' },
+            { name: '안내 사항', value: '예기치 못한 에러로 복구된 투표입니다.' },
+            {
+                name: '참여 현황',
+                value: `
+                    🟢 우선참여: ${module.exports.getResult().specialParticipated}명
+                    🔵 참여: ${module.exports.getResult().participated}명
+                    🔴 불참: ${module.exports.getResult().notParticipated}명
+                    ❔ 미투표: ${module.exports.getResult().notVoted}명
+                    `,
+            }
+        )
+        .setFooter({ text: '• 상호작용 실패 문구가 뜨면 잠시후(10초) 다시 시도해 주세요 •' });
+
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setLabel('우선참여 (특수병)').setCustomId('btnFirstTrue').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setLabel('참여').setCustomId('btnTrue').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setLabel('불참').setCustomId('btnFalse').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setLabel('참여 현황').setCustomId('btnResultParticipated').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setLabel('불참/미투표 현황')
+            .setCustomId('btnResultNotParticipated')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    // 이전 메시지 삭제
+    if (votingMessage) {
+        try {
+            await votingMessage.delete(); // 이전 메시지 삭제
+            console.log('이전 투표 메시지가 삭제되었습니다.');
+        } catch (error) {
+            console.error('이전 투표 메시지 삭제 중 오류 발생:', error);
+        }
+    }
+
+    const guild =
+        process.env.NODE_ENV === 'development'
+            ? await client.guilds.fetch(process.env.TEST_SERVER_ID)
+            : await client.guilds.fetch(process.env.PRODUCTION_SERVER_ID); // 서버 ID 가져오기
+    // const guild = await client.guilds.fetch(process.env.TEST_SERVER_ID); // 서버 ID 가져오기
+    const channel =
+        process.env.NODE_ENV === 'development'
+            ? await guild.channels.fetch(process.env.TEST_CHANNEL_ID)
+            : await guild.channels.fetch(process.env.PRODUCTION_CHANNEL_ID); // 채널 ID 가져오기
+    // const channel = await guild.channels.fetch(process.env.TEST_CHANNEL_ID); // 채널 ID 가져오기
+
+    // 새로운 메시지를 생성하고 저장
+    const message = await channel.send({ embeds: [embed], components: [buttons] });
+    module.exports.setMessage(message); // 메시지 저장
+    console.log('투표 메시지가 복구되었습니다.');
+}

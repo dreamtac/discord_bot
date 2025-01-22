@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const votingStatus = require('../../votingStatus');
+const votingStateDB = require('../../models/votingStateDB');
 
 module.exports = async interaction => {
     const moment = require('moment-timezone');
@@ -122,6 +123,41 @@ ${userId}님의 투표 상태는 *** ${myVote} *** 입니다.
 `;
 
         sendPaginatedMessages(interaction, messageContent);
+    }
+
+    const result = votingStatus.getResult();
+    await updateEmbedMessage(result);
+};
+
+// 실시간 임베드 업데이트 함수
+const updateEmbedMessage = async result => {
+    const votingMessage = votingStatus.getMessage();
+    // console.log('투표 메시지:', votingMessage);
+
+    if (!votingMessage || !votingMessage.embeds || votingMessage.embeds.length === 0) {
+        //todo: db에서 메시지 가져오기
+        // votingStateDB.findOne({}).then(votingState => {
+        //     if (votingState) {
+        //         votingMessage = votingState.message;
+        //     }
+        // });
+        console.error('투표 메시지가 없거나 임베드가 설정되지 않았습니다.');
+        return;
+    }
+
+    const embed = votingMessage.embeds[0];
+    embed.fields[2].value = `
+    🟢 우선참여: ${result.specialParticipated}명
+    🔵 참여: ${result.participated}명
+    🔴 불참: ${result.notParticipated}명
+    ❔ 미투표: ${result.notVoted}명
+    `;
+
+    try {
+        await votingMessage.edit({ embeds: [embed] });
+        // console.log('투표 메시지 업데이트 완료:', embed.data.fields[2].value);
+    } catch (err) {
+        console.error('투표 메시지 업데이트 중 에러 발생:', err);
     }
 };
 
