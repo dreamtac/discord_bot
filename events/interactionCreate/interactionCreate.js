@@ -63,15 +63,15 @@ module.exports = async interaction => {
         }
 
         if (interaction.customId === 'btnFirstTrue') {
-            votingStatus.setStatus(userId, '우선참여');
+            await votingStatus.setStatus(userId, '우선참여');
             await interaction.editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         } else if (interaction.customId === 'btnTrue') {
-            votingStatus.setStatus(userId, '참여');
+            await votingStatus.setStatus(userId, '참여');
             await interaction.editReply({ content: '✅ 참여로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         } else if (interaction.customId === 'btnFalse') {
-            votingStatus.setStatus(userId, '불참');
+            await votingStatus.setStatus(userId, '불참');
             await interaction.editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true });
             setTimeout(() => interaction.deleteReply(), 5000);
         }

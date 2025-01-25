@@ -125,7 +125,7 @@ module.exports = {
             .catch(err => {
                 console.log(`Error: ${err}`);
                 interaction.followUp({
-                    content: '투표창을 닫았거나 시간이 초과(10분)되었습니다.',
+                    content: "error - '프리덤'에게 문의 주세요!!",
                     ephemeral: true,
                 });
             });
