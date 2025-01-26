@@ -86,6 +86,18 @@ module.exports = {
             });
         }
     },
+    // initData: async () => {
+    //     order = []; //기존 배열 초기화
+    //     votingStatus = {}; // 유저별 투표 상태 초기화
+    //     queue = []; //비동기 작업 큐 초기화
+    //     queueRunning = false; // 큐 작업 상태 초기화
+    //     votingClosed = true; // 투표 종료 상태로 초기화
+    //     await MemberDB.collection.drop(); //컬렉션 삭제
+    //     await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
+
+    //     const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+    //     console.log(`투표 데이터 초기화 완료! - ${krTime}`);
+    // },
     openVoting: async () => {
         //************초기화 코드************//
         order = []; //기존 배열 초기화
@@ -95,6 +107,7 @@ module.exports = {
         votingClosed = true; // 투표 종료 상태로 초기화
 
         await MemberDB.collection.drop(); //컬렉션 삭제
+
         await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
 
         const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
@@ -104,6 +117,7 @@ module.exports = {
         votingClosed = false;
         // order = []; //기존 배열 초기화
         // await MemberDB.deleteMany({}); //기존 투표 데이터 db에서 삭제
+        // const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
         await VotingState.findOneAndUpdate({}, { closed: false }, { upsert: true }); // db 투표 진행 상황 초기화
         console.log(`투표 시작됨! - ${krTime}`);
     },
