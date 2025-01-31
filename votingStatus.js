@@ -196,13 +196,13 @@ module.exports = {
             const statuses = await MemberDB.find({}).sort({ number: 1 });
             order = [];
             statuses.forEach(doc => {
-                console.log(`재부팅..:`, `${doc.nickName} ${doc.status} ${doc.number}`);
+                // console.log(`재부팅..:`, `${doc.nickName} ${doc.status} ${doc.number}`);
                 votingStatus[doc.nickName] = doc.status;
                 if (doc.status === '우선참여' || doc.status === '참여') {
-                    console.log(`order 배열에 추가...`);
+                    // console.log(`order 배열에 추가...`);
                     order[doc.number - 1] = doc.nickName;
                 }
-                console.log('재부팅 order: ', order);
+                // console.log('재부팅 order: ', order);
                 // order[doc.number - 1] = doc.nickName;
             });
             await restoreVotingStatus(client);

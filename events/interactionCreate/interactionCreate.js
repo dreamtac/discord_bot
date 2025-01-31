@@ -23,190 +23,219 @@ module.exports = async interaction => {
         } - ${krTime}`
     );
 
-    await interaction.deferReply({ ephemeral: true }).catch(err => {
-        console.log(`버튼 이벤트 에러: ${err}`);
-        interaction.followUp({ content: '❌ 에러가 발생했습니다. 다시 시도해주세요.', ephemeral: true });
-    });
+    try {
+        // 먼저 응답 지연을 알림
+        await interaction.deferReply({ ephemeral: true }).catch(console.error);
 
-    const userId = interaction.member.nickname ? interaction.member.nickname : interaction.user.username;
+        const userId = interaction.member.nickname ? interaction.member.nickname : interaction.user.username;
 
-    if (
-        interaction.customId === 'btnFirstTrue' ||
-        interaction.customId === 'btnTrue' ||
-        interaction.customId === 'btnFalse'
-    ) {
-        // 역할이 용병인지 체크
-        if (interaction.member.roles.cache.some(role => role.name === '용병')) {
-            console.log('용병 투표 거절됨');
-            await interaction.editReply({
-                content: `❌ 용병은 투표에 참여할 수 없습니다.`,
-                ephemeral: true,
-            });
-            setTimeout(() => interaction.deleteReply(), 5000);
-            return;
-        }
-        //투표가 종료되었는지 체크
-        if (votingStatus.isVotingClosed()) {
-            console.log(`투표 종료로 요청 거절됨`);
-            await interaction.editReply({
-                content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                ephemeral: true,
-            });
-            setTimeout(() => interaction.deleteReply(), 5000);
-            return;
-        }
-        //동일한 상태로 투표하려는지 체크 (참여 -> 참여, 우선참여 -> 우선참여)
-        const currentStatus = votingStatus.getStatus()[userId]; //유저의 현재 상태 가져오기
-        console.log(currentStatus);
-        let newStatus = '';
-
-        if (interaction.customId === 'btnFirstTrue') newStatus = '우선참여';
-        else if (interaction.customId === 'btnTrue') newStatus = '참여';
-        else if (interaction.customId === 'btnFalse') newStatus = '불참';
-
-        if (currentStatus === newStatus) {
-            await interaction.editReply({
-                content: `❌ 이미 ${newStatus} 상태입니다.`,
-                ephemeral: true,
-            });
-            setTimeout(() => interaction.deleteReply(), 5000);
-            return;
-        }
-
-        // 이미 투표한 상태이고, 다른 상태로 변경하려는 경우
-        if (currentStatus !== '미투표' && currentStatus && currentStatus !== newStatus) {
-            const confirmButton = new ButtonBuilder()
-                .setCustomId(`confirm_${newStatus}`)
-                .setLabel('확인')
-                .setStyle(ButtonStyle.Success);
-
-            const cancelButton = new ButtonBuilder()
-                .setCustomId('cancel')
-                .setLabel('취소')
-                .setStyle(ButtonStyle.Danger);
-
-            const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
-
-            // 먼저 확인 메시지를 보냅니다
-            await interaction.editReply({
-                content: `정말 "${currentStatus}"에서 "${newStatus}"로 변경하시겠습니까?`,
-                components: [row],
-                ephemeral: true,
-            });
-
-            try {
-                // 버튼 응답을 기다립니다
-                const confirmation = await interaction.channel.awaitMessageComponent({
-                    filter: i =>
-                        i.user.id === interaction.user.id &&
-                        (i.customId === `confirm_${newStatus}` || i.customId === 'cancel'),
-                    time: 30000,
-                });
-
-                // 버튼 응답에 따라 처리합니다
-                if (confirmation.customId === `confirm_${newStatus}`) {
-                    if (votingStatus.isVotingClosed()) {
-                        await interaction.editReply({
-                            content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                            ephemeral: true,
-                        });
-                        return;
-                    }
-                    await votingStatus.setStatus(userId, newStatus);
-                    await interaction.editReply({
-                        content: `✅ ${newStatus}로 변경되었습니다.`,
-                        components: [],
+        if (
+            interaction.customId === 'btnFirstTrue' ||
+            interaction.customId === 'btnTrue' ||
+            interaction.customId === 'btnFalse'
+        ) {
+            // 역할이 용병인지 체크
+            if (interaction.member.roles.cache.some(role => role.name === '용병')) {
+                console.log('용병 투표 거절됨');
+                await interaction
+                    .editReply({
+                        content: `❌ 용병은 투표에 참여할 수 없습니다.`,
                         ephemeral: true,
-                    });
-                    const result = votingStatus.getResult();
-                    await updateEmbedMessage(result);
-                } else if (confirmation.customId === 'cancel') {
-                    if (votingStatus.isVotingClosed()) {
-                        await interaction.editReply({
-                            content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                            ephemeral: true,
-                        });
-                        return;
-                    }
-                    await interaction.editReply({
-                        content: '❌ 변경이 취소되었습니다.',
-                        components: [],
+                    })
+                    .catch(console.error);
+                setTimeout(() => {
+                    interaction.deleteReply().catch(console.error);
+                }, 5000);
+                return;
+            }
+            //투표가 종료되었는지 체크
+            if (votingStatus.isVotingClosed()) {
+                console.log(`투표 종료로 요청 거절됨`);
+                await interaction
+                    .editReply({
+                        content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
                         ephemeral: true,
+                    })
+                    .catch(console.error);
+                setTimeout(() => {
+                    interaction.deleteReply().catch(console.error);
+                }, 5000);
+                return;
+            }
+            //동일한 상태로 투표하려는지 체크 (참여 -> 참여, 우선참여 -> 우선참여)
+            const currentStatus = votingStatus.getStatus()[userId]; //유저의 현재 상태 가져오기
+            console.log(currentStatus);
+            let newStatus = '';
+
+            if (interaction.customId === 'btnFirstTrue') newStatus = '우선참여';
+            else if (interaction.customId === 'btnTrue') newStatus = '참여';
+            else if (interaction.customId === 'btnFalse') newStatus = '불참';
+
+            if (currentStatus === newStatus) {
+                await interaction
+                    .editReply({
+                        content: `❌ 이미 ${newStatus} 상태입니다.`,
+                        ephemeral: true,
+                    })
+                    .catch(console.error);
+                setTimeout(() => {
+                    interaction.deleteReply().catch(console.error);
+                }, 5000);
+                return;
+            }
+
+            // 이미 투표한 상태이고, 다른 상태로 변경하려는 경우
+            if (currentStatus !== '미투표' && currentStatus && currentStatus !== newStatus) {
+                const confirmButton = new ButtonBuilder()
+                    .setCustomId(`confirm_${newStatus}`)
+                    .setLabel('확인')
+                    .setStyle(ButtonStyle.Success);
+
+                const cancelButton = new ButtonBuilder()
+                    .setCustomId('cancel')
+                    .setLabel('취소')
+                    .setStyle(ButtonStyle.Danger);
+
+                const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
+
+                // 먼저 확인 메시지를 보냅니다
+                await interaction
+                    .editReply({
+                        content: `정말 "${currentStatus}"에서 "${newStatus}"로 변경하시겠습니까?`,
+                        components: [row],
+                        ephemeral: true,
+                    })
+                    .catch(console.error);
+
+                try {
+                    // 버튼 응답을 기다립니다
+                    const confirmation = await interaction.channel.awaitMessageComponent({
+                        filter: i =>
+                            i.user.id === interaction.user.id &&
+                            (i.customId === `confirm_${newStatus}` || i.customId === 'cancel'),
+                        time: 30000,
                     });
+
+                    // 버튼 응답에 따라 처리합니다
+                    if (confirmation.customId === `confirm_${newStatus}`) {
+                        if (votingStatus.isVotingClosed()) {
+                            await interaction
+                                .editReply({
+                                    content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                                    ephemeral: true,
+                                })
+                                .catch(console.error);
+                            return;
+                        }
+                        await votingStatus.setStatus(userId, newStatus);
+                        await interaction
+                            .editReply({
+                                content: `✅ ${newStatus}로 변경되었습니다.`,
+                                components: [],
+                                ephemeral: true,
+                            })
+                            .catch(console.error);
+                        const result = votingStatus.getResult();
+                        await updateEmbedMessage(result);
+                    } else if (confirmation.customId === 'cancel') {
+                        if (votingStatus.isVotingClosed()) {
+                            await interaction
+                                .editReply({
+                                    content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                                    ephemeral: true,
+                                })
+                                .catch(console.error);
+                            return;
+                        }
+                        await interaction
+                            .editReply({
+                                content: '❌ 변경이 취소되었습니다.',
+                                components: [],
+                                ephemeral: true,
+                            })
+                            .catch(console.error);
+                    }
+
+                    // 5초 후에 메시지를 삭제합니다
+                    setTimeout(() => {
+                        try {
+                            interaction.deleteReply().catch(console.error);
+                        } catch (err) {
+                            console.error('메시지 삭제 중 에러:', err);
+                        }
+                    }, 5000);
+                } catch (e) {
+                    console.error('시간 초과 또는 에러:', e);
+                    await interaction
+                        .editReply({
+                            content: '❌ 시간이 초과되었습니다.',
+                            components: [],
+                        })
+                        .catch(console.error);
+                    // 5초 후에 시간 초과 메시지 삭제
+                    setTimeout(() => {
+                        try {
+                            interaction.deleteReply().catch(console.error);
+                        } catch (err) {
+                            console.error('메시지 삭제 중 에러:', err);
+                        }
+                    }, 5000);
                 }
-
-                // 5초 후에 메시지를 삭제합니다
-                setTimeout(() => {
-                    try {
-                        interaction.deleteReply();
-                    } catch (err) {
-                        console.error('메시지 삭제 중 에러:', err);
-                    }
-                }, 5000);
-            } catch (e) {
-                console.error('시간 초과 또는 에러:', e);
-                await interaction.editReply({
-                    content: '❌ 시간이 초과되었습니다.',
-                    components: [],
-                });
-                // 5초 후에 시간 초과 메시지 삭제
-                setTimeout(() => {
-                    try {
-                        interaction.deleteReply();
-                    } catch (err) {
-                        console.error('메시지 삭제 중 에러:', err);
-                    }
-                }, 5000);
+                return;
             }
-            return;
-        }
 
-        // 처음 투표하거나 같은 상태로 투표하는 경우는 기존 로직 실행
-        if (interaction.customId === 'btnFirstTrue') {
-            await votingStatus.setStatus(userId, '우선참여');
-            await interaction.editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true });
-        } else if (interaction.customId === 'btnTrue') {
-            await votingStatus.setStatus(userId, '참여');
-            await interaction.editReply({ content: '✅ 참여로 기록되었습니다.', ephemeral: true });
-        } else if (interaction.customId === 'btnFalse') {
-            await votingStatus.setStatus(userId, '불참');
-            await interaction.editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true });
-        }
-        setTimeout(() => {
-            try {
-                interaction.deleteReply();
-            } catch (err) {
-                console.error('메시지 삭제 중 에러:', err);
+            // 처음 투표하거나 같은 상태로 투표하는 경우는 기존 로직 실행
+            if (interaction.customId === 'btnFirstTrue') {
+                await votingStatus.setStatus(userId, '우선참여');
+                await interaction
+                    .editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true })
+                    .catch(console.error);
+            } else if (interaction.customId === 'btnTrue') {
+                await votingStatus.setStatus(userId, '참여');
+                await interaction
+                    .editReply({ content: '✅ 참여로 기록되었습니다.', ephemeral: true })
+                    .catch(console.error);
+            } else if (interaction.customId === 'btnFalse') {
+                await votingStatus.setStatus(userId, '불참');
+                await interaction
+                    .editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true })
+                    .catch(console.error);
             }
-        }, 5000);
-    } else if (interaction.customId === 'btnResultParticipated') {
-        // 우선참여와 참여자만 보이기
-        const result = votingStatus.getResult();
+            setTimeout(() => {
+                try {
+                    interaction.deleteReply().catch(console.error);
+                } catch (err) {
+                    console.error('메시지 삭제 중 에러:', err);
+                }
+            }, 5000);
+        } else if (interaction.customId === 'btnResultParticipated') {
+            // 우선참여와 참여자만 보이기
+            const result = votingStatus.getResult();
 
-        // 순번과 체크 표시를 분리하여 처리
-        let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => {
-            const isInVoice = voiceUser.includes(user);
-            return `${index + 1}. ${user}${isInVoice ? ' ✅' : ''}`;
-        });
+            // 순번과 체크 표시를 분리하여 처리
+            let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => {
+                const isInVoice = voiceUser.includes(user);
+                return `${index + 1}. ${user}${isInVoice ? ' ✅' : ''}`;
+            });
 
-        let numberedParticipants = result.participatedUser.map((user, index) => {
-            const isInVoice = voiceUser.includes(user);
-            return `${index + 1 + numberedSpecialParticipants.length}. ${user}${isInVoice ? ' ✅' : ''}`;
-        });
+            let numberedParticipants = result.participatedUser.map((user, index) => {
+                const isInVoice = voiceUser.includes(user);
+                return `${index + 1 + numberedSpecialParticipants.length}. ${user}${isInVoice ? ' ✅' : ''}`;
+            });
 
-        const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
-        let myNumber = null; // 나의 투표 순번
+            const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
+            let myNumber = null; // 나의 투표 순번
 
-        if (myVote === '우선참여') {
-            myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
-        } else if (myVote === '참여') {
-            myNumber =
-                numberedSpecialParticipants.length +
-                numberedParticipants.findIndex(participant => participant.includes(userId)) +
-                1;
-        }
+            if (myVote === '우선참여') {
+                myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
+            } else if (myVote === '참여') {
+                myNumber =
+                    numberedSpecialParticipants.length +
+                    numberedParticipants.findIndex(participant => participant.includes(userId)) +
+                    1;
+            }
 
-        const messageContent = `
+            const messageContent = `
 **투표 현황:(${result.voteRate})**
 ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumber || '없음'}***  입니다.
 
@@ -217,16 +246,16 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
 \`음성 채널에 입장한 유저는 이름 끝에 ✅가 붙습니다.\`
 `;
 
-        sendPaginatedMessages(interaction, messageContent);
-    } else if (interaction.customId === 'btnResultNotParticipated') {
-        // 불참자와 미투표자만 보이기
-        const result = votingStatus.getResult();
-        let sortedNotParticipatedUser = result.notParticipatedUser.sort();
-        let sortedNotVotedUser = result.notVotedUser.sort();
+            sendPaginatedMessages(interaction, messageContent);
+        } else if (interaction.customId === 'btnResultNotParticipated') {
+            // 불참자와 미투표자만 보이기
+            const result = votingStatus.getResult();
+            let sortedNotParticipatedUser = result.notParticipatedUser.sort();
+            let sortedNotVotedUser = result.notVotedUser.sort();
 
-        const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
+            const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
 
-        const messageContent = `
+            const messageContent = `
 **투표 현황:(${result.voteRate})**
 ${userId}님의 투표 상태는 ***${myVote}***  입니다.
 
@@ -235,11 +264,31 @@ ${userId}님의 투표 상태는 ***${myVote}***  입니다.
 **-------- ❔ 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}
 `;
 
-        sendPaginatedMessages(interaction, messageContent);
-    }
+            sendPaginatedMessages(interaction, messageContent);
+        }
 
-    const result = votingStatus.getResult();
-    await updateEmbedMessage(result);
+        const result = votingStatus.getResult();
+        await updateEmbedMessage(result);
+    } catch (error) {
+        console.error('버튼 이벤트 처리 중 에러:', error);
+
+        // 에러 발생 시 응답
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction
+                .reply({
+                    content: '❌ 에러가 발생했습니다. 다시 시도해주세요.',
+                    ephemeral: true,
+                })
+                .catch(console.error);
+        } else {
+            await interaction
+                .followUp({
+                    content: '❌ 에러가 발생했습니다. 다시 시도해주세요.',
+                    ephemeral: true,
+                })
+                .catch(console.error);
+        }
+    }
 };
 
 // 실시간 임베드 업데이트 함수
