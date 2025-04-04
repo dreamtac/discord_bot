@@ -352,3 +352,31 @@ const splitLongMessage = message => {
     if (currentMessage) messages.push(currentMessage);
     return messages;
 };
+// const { Events } = require('discord.js');
+
+// module.exports = {
+//     name: Events.InteractionCreate,
+//     async execute(interaction) {
+//         // 버튼 클릭 이벤트 처리
+//         if (interaction.isButton()) {
+//             if (interaction.customId === 'vote_button') {
+//                 try {
+//                     const userId = interaction.user.id;
+//                     const nickname = interaction.member.nickname || interaction.user.username;
+
+//                     // 사용자에게만 보이는 응답 전송
+//                     await interaction.reply({
+//                         content: `${nickname}님, 투표 페이지로 이동하세요: http://localhost:3000/vote?user=${userId}`,
+//                         ephemeral: true, // 다른 사용자에게는 보이지 않음
+//                     });
+//                 } catch (error) {
+//                     console.error('버튼 클릭 처리 중 오류 발생:', error);
+//                     await interaction.reply({
+//                         content: '투표 처리 중 오류가 발생했습니다. 나중에 다시 시도해주세요.',
+//                         ephemeral: true,
+//                     });
+//                 }
+//             }
+//         }
+//     },
+// };

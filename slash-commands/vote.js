@@ -1,3 +1,42 @@
+// const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+
+// module.exports = {
+//     data: new SlashCommandBuilder().setName('vote').setDescription('투표를 위한 버튼을 생성합니다.'),
+
+//     run: async (client, interaction) => {
+//         try {
+//             // 임베드 생성
+//             const voteEmbed = new EmbedBuilder()
+//                 .setColor('#0099ff')
+//                 .setTitle('📊 투표 참여하기')
+//                 .setDescription('아래 버튼을 클릭하여 투표에 참여하세요.')
+//                 .setTimestamp();
+
+//             // 투표 버튼 생성
+//             const voteButton = new ButtonBuilder()
+//                 .setCustomId('vote_button')
+//                 .setLabel('투표 참여하기')
+//                 .setStyle(ButtonStyle.Primary)
+//                 .setEmoji('🗳️');
+
+//             // 버튼을 포함한 액션 로우 생성
+//             const row = new ActionRowBuilder().addComponents(voteButton);
+
+//             // 응답 전송
+//             await interaction.reply({
+//                 embeds: [voteEmbed],
+//                 components: [row],
+//             });
+//         } catch (error) {
+//             console.error('투표 명령어 실행 중 오류 발생:', error);
+//             await interaction.reply({
+//                 content: '투표 버튼 생성 중 오류가 발생했습니다.',
+//                 ephemeral: true,
+//             });
+//         }
+//     },
+// };
+
 const {
     ActionRowBuilder,
     ModalBuilder,
