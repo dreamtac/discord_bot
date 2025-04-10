@@ -4,7 +4,6 @@ module.exports = {
     run: async ({ interaction }) => {
         console.log('next.js 실행');
         const button = new ButtonBuilder({
-            customId: 'redirectBtn',
             label: '투표 페이지로 이동',
             style: ButtonStyle.Link,
             url: 'http://localhost:3000/vote',
