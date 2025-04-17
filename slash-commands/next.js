@@ -3,8 +3,8 @@ const jwt = require('jsonwebtoken');
 
 module.exports = {
     run: async ({ interaction }) => {
-        console.log('next.js 실행');
-        console.log(interaction);
+        console.log(`next.js 실행 - ${interaction.member.nickname}`);
+        // console.log(interaction);
 
         // JWT 토큰 생성
         const token = jwt.sign(
@@ -19,7 +19,7 @@ module.exports = {
         );
 
         // 토큰이 포함된 투표 URL 생성
-        const voteUrl = `${process.env.NEXT_URL}/vote?token=${token}`;
+        const voteUrl = `${process.env.NEXT_URL}/auth/verify?token=${token}`;
 
         const button = new ButtonBuilder({
             label: '투표 페이지로 이동',
