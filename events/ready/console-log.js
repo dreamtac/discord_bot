@@ -6,8 +6,12 @@ const cron = require('node-cron');
 module.exports = async client => {
     console.log(`${client.user.username} is online. - ${krTime}`);
     await restoreVotingStatus(client);
-    cron.schedule('* * * * *', async () => {
-        console.log(`1분마다 실행 - ${moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`)}`);
+
+    // 매 정각의 5초마다 실행되도록 설정 (초 분 시 일 월 요일)
+    cron.schedule('5 0 * * * *', async () => {
+        const currentTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+        console.log(`정각 5초마다 실행 - ${currentTime}`);
+
         try {
             console.log('API 호출 시작...');
             const response = await fetch(`${process.env.NEXT_URL}/api/vote/check`, {
