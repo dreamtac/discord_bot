@@ -17,17 +17,13 @@ module.exports = async interaction => {
 
     const moment = require('moment-timezone');
     const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-    console.log(
-        `${interaction.member.nickname ? interaction.member.nickname : interaction.user.username} : ${
-            interaction.customId
-        } - ${krTime}`
-    );
+    console.log(`${interaction.member.displayName} : ${interaction.customId} - ${krTime}`);
 
     try {
         // 먼저 응답 지연을 알림
         await interaction.deferReply({ ephemeral: true }).catch(console.error);
 
-        const userId = interaction.member.nickname ? interaction.member.nickname : interaction.user.username;
+        const userId = interaction.member.displayName;
 
         if (
             interaction.customId === 'btnFirstTrue' ||

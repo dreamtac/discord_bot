@@ -62,7 +62,7 @@ client.on('messageCreate', msg => {
 const voiceUser = [];
 
 client.on('voiceStateUpdate', (oldState, newState) => {
-    const user = newState.member.nickname;
+    const user = newState.member.displayName;
     // console.log(newState.member.nickname);
     // 유저가 음성 채널에 새로 들어온 경우
     if (!oldState.channelId && newState.channelId) {

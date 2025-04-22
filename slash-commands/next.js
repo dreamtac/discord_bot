@@ -3,8 +3,12 @@ const jwt = require('jsonwebtoken');
 
 module.exports = {
     run: async ({ interaction }) => {
-        console.log(`next.js 실행 - ${interaction.member.nickname}`);
-        // console.log(interaction);
+        console.log('next.js 실행 - ', interaction.member.displayName);
+        const guild = interaction.guild;
+        const members = await guild.members.fetch(); // 모든 멤버 정보를 가져옴
+        members.forEach(member => {
+            console.log(member.displayName);
+        });
 
         // JWT 토큰 생성
         const token = jwt.sign(

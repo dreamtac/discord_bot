@@ -53,6 +53,19 @@ module.exports = {
     run: async ({ interaction }) => {
         // const subcommand = interaction.options.getSubcommand();
 
+        // 역할 확인: '응애'나 '노역꾼' 역할을 가지고 있는지 체크
+        const hasRequiredRole = interaction.member.roles.cache.some(
+            role => role.name === '응애' || role.name === '노역꾼'
+        );
+
+        if (!hasRequiredRole) {
+            await interaction.reply({
+                content: `투표에 참여하기 위해서는 '응애' 또는 '노역꾼' 역할이 필요합니다.`,
+                ephemeral: true,
+            });
+            return;
+        }
+
         if (!votingStatus.isVotingClosed()) {
             await interaction.reply({
                 content: `투표가 이미 진행중입니다.\n'/종료' 를 입력해 진행중인 투표를 종료해주세요.`,
@@ -99,12 +112,15 @@ module.exports = {
                 await votingStatus.openVoting(); //투표 상태를 진행으로 변경
                 const guild = interaction.guild;
                 const members = await guild.members.fetch(); // 모든 멤버 정보를 가져옴
-                const ignoreRoleId = '용병'; //용병 역할을 가진 유저를 걸러내기 위한 변수
                 // 모든 멤버의 상태를 '미투표'로 초기화
                 members.forEach(member => {
-                    if (!member.roles.cache.some(role => role.name === '용병') && !member.user.bot) {
-                        // 봇은 제외
-                        votingStatus.setStatus(member.nickname ? member.nickname : member.user.username, '미투표');
+                    // 봇과 용병 역할을 가진 사용자는 제외하고, '응애' 또는 '노역꾼' 역할을 가진 사용자만 포함
+                    if (
+                        !member.roles.cache.some(role => role.name === '용병') &&
+                        !member.user.bot &&
+                        member.roles.cache.some(role => role.name === '응애' || role.name === '노역꾼')
+                    ) {
+                        votingStatus.setStatus(member.displayName, '미투표');
                     }
                 });
 
