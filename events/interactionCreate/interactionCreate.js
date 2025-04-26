@@ -25,6 +25,9 @@ module.exports = async interaction => {
 
         const userId = interaction.member.displayName;
 
+        // 운영진인지 확인하는 함수
+        const isAdmin = interaction.member.roles.cache.some(role => role.name === '노예왕');
+
         if (
             interaction.customId === 'btnFirstTrue' ||
             interaction.customId === 'btnTrue' ||
@@ -204,34 +207,52 @@ module.exports = async interaction => {
                     console.error('메시지 삭제 중 에러:', err);
                 }
             }, 5000);
-        } else if (interaction.customId === 'btnResultParticipated') {
-            // 우선참여와 참여자만 보이기
-            const result = votingStatus.getResult();
-
-            // 순번과 체크 표시를 분리하여 처리
-            let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => {
-                const isInVoice = voiceUser.includes(user);
-                return `${index + 1}. ${user}${isInVoice ? ' ✅' : ''}`;
-            });
-
-            let numberedParticipants = result.participatedUser.map((user, index) => {
-                const isInVoice = voiceUser.includes(user);
-                return `${index + 1 + numberedSpecialParticipants.length}. ${user}${isInVoice ? ' ✅' : ''}`;
-            });
-
-            const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
-            let myNumber = null; // 나의 투표 순번
-
-            if (myVote === '우선참여') {
-                myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
-            } else if (myVote === '참여') {
-                myNumber =
-                    numberedSpecialParticipants.length +
-                    numberedParticipants.findIndex(participant => participant.includes(userId)) +
-                    1;
+        } else if (
+            interaction.customId === 'btnResultParticipated' ||
+            interaction.customId === 'btnResultNotParticipated'
+        ) {
+            // 운영진 권한 확인
+            if (!isAdmin) {
+                await interaction
+                    .editReply({
+                        content: `❌ 권한이 없습니다. 투표 현황은 운영진만 볼 수 있습니다.`,
+                        ephemeral: true,
+                    })
+                    .catch(console.error);
+                setTimeout(() => {
+                    interaction.deleteReply().catch(console.error);
+                }, 5000);
+                return;
             }
 
-            const messageContent = `
+            if (interaction.customId === 'btnResultParticipated') {
+                // 우선참여와 참여자만 보이기
+                const result = votingStatus.getResult();
+
+                // 순번과 체크 표시를 분리하여 처리
+                let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => {
+                    const isInVoice = voiceUser.includes(user);
+                    return `${index + 1}. ${user}${isInVoice ? ' ✅' : ''}`;
+                });
+
+                let numberedParticipants = result.participatedUser.map((user, index) => {
+                    const isInVoice = voiceUser.includes(user);
+                    return `${index + 1 + numberedSpecialParticipants.length}. ${user}${isInVoice ? ' ✅' : ''}`;
+                });
+
+                const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
+                let myNumber = null; // 나의 투표 순번
+
+                if (myVote === '우선참여') {
+                    myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
+                } else if (myVote === '참여') {
+                    myNumber =
+                        numberedSpecialParticipants.length +
+                        numberedParticipants.findIndex(participant => participant.includes(userId)) +
+                        1;
+                }
+
+                const messageContent = `
 **투표 현황:(${result.voteRate})**
 ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumber || '없음'}***  입니다.
 
@@ -242,16 +263,16 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
 \`음성 채널에 입장한 유저는 이름 끝에 ✅가 붙습니다.\`
 `;
 
-            sendPaginatedMessages(interaction, messageContent);
-        } else if (interaction.customId === 'btnResultNotParticipated') {
-            // 불참자와 미투표자만 보이기
-            const result = votingStatus.getResult();
-            let sortedNotParticipatedUser = result.notParticipatedUser.sort();
-            let sortedNotVotedUser = result.notVotedUser.sort();
+                sendPaginatedMessages(interaction, messageContent);
+            } else if (interaction.customId === 'btnResultNotParticipated') {
+                // 불참자와 미투표자만 보이기
+                const result = votingStatus.getResult();
+                let sortedNotParticipatedUser = result.notParticipatedUser.sort();
+                let sortedNotVotedUser = result.notVotedUser.sort();
 
-            const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
+                const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
 
-            const messageContent = `
+                const messageContent = `
 **투표 현황:(${result.voteRate})**
 ${userId}님의 투표 상태는 ***${myVote}***  입니다.
 
@@ -260,7 +281,8 @@ ${userId}님의 투표 상태는 ***${myVote}***  입니다.
 **-------- ❔ 미투표: ${result.notVoted}명 --------**\n${sortedNotVotedUser.join('\n')}
 `;
 
-            sendPaginatedMessages(interaction, messageContent);
+                sendPaginatedMessages(interaction, messageContent);
+            }
         }
 
         const result = votingStatus.getResult();
@@ -297,16 +319,14 @@ const updateEmbedMessage = async result => {
     }
 
     const embed = votingMessage.embeds[0];
-    embed.fields[2].value = `
-    🟢 우선참여: ${result.specialParticipated}명
-    🔵 참여: ${result.participated}명
-    🔴 불참: ${result.notParticipated}명
-    ❔ 미투표: ${result.notVoted}명
-    `;
+
+    // 일시와 안내사항만 유지하고, 참여 현황 필드는 제거
+    if (embed.fields.length > 2) {
+        embed.fields.splice(2); // 세 번째 필드부터 제거
+    }
 
     try {
         await votingMessage.edit({ embeds: [embed] });
-        // console.log('투표 메시지 업데이트 완료:', embed.data.fields[2].value);
     } catch (err) {
         console.error('투표 메시지 업데이트 중 에러 발생:', err);
     }

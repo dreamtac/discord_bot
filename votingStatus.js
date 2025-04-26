@@ -216,16 +216,7 @@ async function restoreVotingStatus(client) {
         .setTitle('공성/거점 투표')
         .addFields(
             { name: '일시', value: '서버 재시작 후 투표 복구됨' },
-            { name: '안내 사항', value: '예기치 못한 에러로 복구된 투표입니다.' },
-            {
-                name: '참여 현황',
-                value: `
-                    🟢 우선참여: ${module.exports.getResult().specialParticipated}명
-                    🔵 참여: ${module.exports.getResult().participated}명
-                    🔴 불참: ${module.exports.getResult().notParticipated}명
-                    ❔ 미투표: ${module.exports.getResult().notVoted}명
-                    `,
-            }
+            { name: '안내 사항', value: '예기치 못한 에러로 복구된 투표입니다.' }
         )
         .setFooter({ text: '• 상호작용 실패 문구가 뜨면 잠시후(10초) 다시 시도해 주세요 •' });
 

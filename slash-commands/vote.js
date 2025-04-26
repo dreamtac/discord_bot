@@ -154,19 +154,7 @@ module.exports = {
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
                     .setTitle('공성/거점 투표')
-                    .addFields(
-                        { name: '일시', value: date },
-                        { name: '안내 사항', value: description },
-                        {
-                            name: '참여 현황',
-                            value: `
-                            🟢 우선참여: ${result.specialParticipated}명
-                            🔵 참여: ${result.participated}명
-                            🔴 불참: ${result.notParticipated}명
-                            ❔ 미투표: ${result.notVoted}명
-                            `,
-                        }
-                    )
+                    .addFields({ name: '일시', value: date }, { name: '안내 사항', value: description })
                     .setFooter({ text: '• 상호작용 실패 문구가 뜨면 잠시후(10초) 다시 시도해 주세요 •' });
 
                 // 메시지 객체 저장
