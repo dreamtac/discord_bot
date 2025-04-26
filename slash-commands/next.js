@@ -1,43 +1,35 @@
-const { ButtonBuilder, ButtonStyle, ActionRowBuilder, SlashCommandBuilder } = require('discord.js');
-const jwt = require('jsonwebtoken');
+const { ButtonBuilder, ButtonStyle, ActionRowBuilder, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
     run: async ({ interaction }) => {
         console.log('next.js 실행 - ', interaction.member.displayName);
-        const guild = interaction.guild;
-        const members = await guild.members.fetch(); // 모든 멤버 정보를 가져옴
-        members.forEach(member => {
-            console.log(member.displayName);
-        });
 
-        // JWT 토큰 생성
-        const token = jwt.sign(
-            {
-                userId: interaction.user.id,
-                username: interaction.user.username,
-                nickname: interaction.member?.nickname || interaction.user.username,
-                type: 'vote',
-                exp: Math.floor(Date.now() / 1000) + 60 * 60, // 1시간 후 만료
-            },
-            process.env.JWT_SECRET
-        );
+        // 공개 임베드 생성 (모두에게 보이는 메시지)
+        const publicEmbed = new EmbedBuilder()
+            .setColor(0x0099ff)
+            .setTitle('🗳️ 투표 시스템 안내')
+            .setDescription(
+                `투표 시스템에 참여하기 위해서는 개인 인증이 필요합니다.\n\n**토큰 발급 버튼**을 클릭하시면 투표 사이트 접속을 위한 개인 링크가 발급됩니다.`
+            )
+            .addFields(
+                { name: '🔐 토큰 용도', value: '투표 시스템 접속 시 본인 인증을 위해 사용됩니다.', inline: true },
+                { name: '📊 수집 정보', value: '디스코드 ID와 닉네임만 수집합니다.', inline: true },
+                { name: '⏱️ 유효 시간', value: '발급된 토큰은 10분간 유효합니다.', inline: false }
+            )
+            .setFooter({ text: '아래 버튼을 클릭하여 개인 링크를 발급받으세요.' });
 
-        // 토큰이 포함된 투표 URL 생성
-        const voteUrl = `${process.env.NEXT_URL}/auth/verify?token=${token}`;
+        // 토큰 발급 버튼
+        const tokenButton = new ButtonBuilder()
+            .setLabel('토큰 발급')
+            .setStyle(ButtonStyle.Primary)
+            .setCustomId('generate_token');
 
-        const button = new ButtonBuilder({
-            label: '투표 페이지로 이동',
-            style: ButtonStyle.Link,
-            url: voteUrl,
-        });
-        console.log('button 생성');
-
+        // 공개 메시지 전송 (모두에게 보이는 메시지)
         await interaction.reply({
-            content: '투표 페이지로 이동합니다.',
-            components: [new ActionRowBuilder().addComponents(button)],
-            ephemeral: true,
+            embeds: [publicEmbed],
+            components: [new ActionRowBuilder().addComponents(tokenButton)],
         });
-        console.log('reply 완료');
+        console.log('공개 메시지 전송 완료');
     },
     data: new SlashCommandBuilder().setName('링크').setDescription('투표 사이트 링크를 띄웁니다.'),
 };

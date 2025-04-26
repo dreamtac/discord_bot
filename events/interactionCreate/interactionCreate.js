@@ -2,6 +2,7 @@ const { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('
 const votingStatus = require('../../votingStatus');
 const votingStateDB = require('../../models/votingStateDB');
 const { voiceUser } = require('../..');
+const jwt = require('jsonwebtoken');
 
 module.exports = async interaction => {
     if (!interaction.isButton()) return;
@@ -20,6 +21,48 @@ module.exports = async interaction => {
     console.log(`${interaction.member.displayName} : ${interaction.customId} - ${krTime}`);
 
     try {
+        // 토큰 발급 버튼 클릭 이벤트 처리
+        if (interaction.customId === 'generate_token') {
+            // JWT 토큰 생성
+            const token = jwt.sign(
+                {
+                    userId: interaction.user.id,
+                    username: interaction.user.username,
+                    nickname: interaction.user.displayName || interaction.user.username,
+                    type: 'vote',
+                    exp: Math.floor(Date.now() / 1000) + 60 * 10, // 10분 후 만료
+                },
+                process.env.JWT_SECRET
+            );
+
+            // 토큰이 포함된 투표 URL 생성
+            const voteUrl = `${process.env.NEXT_URL}/auth/verify?token=${token}`;
+
+            // 개인 임베드 생성 (클릭한 사용자에게만 보이는 메시지)
+            const privateEmbed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('🔐 개인 투표 링크 발급 완료')
+                .setDescription(
+                    `**${interaction.user.displayName}님**, 투표 시스템 접속을 위한 개인 링크가 발급되었습니다.\n아래 버튼을 클릭하여 투표 페이지로 이동하세요.`
+                )
+                .setFooter({ text: '이 링크는 발급 후 10분간 유효하며, 본인만 사용할 수 있습니다.' });
+
+            // 투표 사이트 이동 버튼
+            const linkButton = new ButtonBuilder()
+                .setLabel('투표 사이트로 이동')
+                .setStyle(ButtonStyle.Link)
+                .setURL(voteUrl);
+
+            // 개인 응답 전송 (버튼을 클릭한 사용자에게만 보이는 메시지)
+            await interaction.reply({
+                embeds: [privateEmbed],
+                components: [new ActionRowBuilder().addComponents(linkButton)],
+                ephemeral: true, // 개인 메시지로 전송 (다른 사용자에게는 보이지 않음)
+            });
+            console.log(`${interaction.user.username}에게 개인 링크 전송 완료`);
+            return;
+        }
+
         // 먼저 응답 지연을 알림
         await interaction.deferReply({ ephemeral: true }).catch(console.error);
 
