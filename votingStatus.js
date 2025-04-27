@@ -31,6 +31,10 @@ module.exports = {
     },
     getMessage: () => votingMessage,
     getStatus: () => votingStatus,
+    setVotingActiveStatus: status => {
+        votingClosed = !status; // status가 true면 votingClosed는 false
+        console.log(`투표 상태가 ${status ? '활성화' : '비활성화'}되었습니다.`);
+    },
     setStatus: async (userId, status) => {
         if (!votingClosed) {
             // console.log('큐에 작업 추가 중...');

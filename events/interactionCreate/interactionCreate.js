@@ -70,7 +70,7 @@ module.exports = async interaction => {
 
         // 운영진인지 확인하는 함수
         const isAdmin = interaction.member.roles.cache.some(
-            role => role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당'
+            role => role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당' || role.name === '접어'
         );
 
         if (
@@ -79,24 +79,29 @@ module.exports = async interaction => {
             interaction.customId === 'btnFalse'
         ) {
             // 역할이 용병인지 체크
-            if (
-                interaction.member.roles.cache.some(role => role.name === '용병') ||
-                !interaction.member.roles.cache.some(
-                    role =>
-                        role.name === '접어' || role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당'
-                )
-            ) {
-                console.log('투표 권한 없음');
-                await interaction
-                    .editReply({
-                        content: `❌ 투표 권한이 없습니다. 역할을 확인해주세요.`,
-                        ephemeral: true,
-                    })
-                    .catch(console.error);
-                setTimeout(() => {
-                    interaction.deleteReply().catch(console.error);
-                }, 5000);
-                return;
+            if (process.env.NODE_ENV !== 'development') {
+                if (
+                    interaction.member.roles.cache.some(role => role.name === '용병') ||
+                    !interaction.member.roles.cache.some(
+                        role =>
+                            role.name === '접어' ||
+                            role.name === 'GANG' ||
+                            role.name === '돚거단' ||
+                            role.name === '포도당'
+                    )
+                ) {
+                    console.log('투표 권한 없음');
+                    await interaction
+                        .editReply({
+                            content: `❌ 투표 권한이 없습니다. 역할을 확인해주세요.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                    setTimeout(() => {
+                        interaction.deleteReply().catch(console.error);
+                    }, 5000);
+                    return;
+                }
             }
             //투표가 종료되었는지 체크
             if (votingStatus.isVotingClosed()) {
@@ -263,17 +268,19 @@ module.exports = async interaction => {
             interaction.customId === 'btnResultNotParticipated'
         ) {
             // 운영진 권한 확인
-            if (!isAdmin) {
-                await interaction
-                    .editReply({
-                        content: `❌ 권한이 없습니다. 투표 현황은 관계자만 볼 수 있습니다.`,
-                        ephemeral: true,
-                    })
-                    .catch(console.error);
-                setTimeout(() => {
-                    interaction.deleteReply().catch(console.error);
-                }, 5000);
-                return;
+            if (process.env.NODE_ENV !== 'development') {
+                if (!isAdmin) {
+                    await interaction
+                        .editReply({
+                            content: `❌ 권한이 없습니다. 투표 현황은 관계자만 볼 수 있습니다.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                    setTimeout(() => {
+                        interaction.deleteReply().catch(console.error);
+                    }, 5000);
+                    return;
+                }
             }
 
             if (interaction.customId === 'btnResultParticipated') {
