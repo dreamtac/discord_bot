@@ -69,7 +69,9 @@ module.exports = async interaction => {
         const userId = interaction.member.displayName;
 
         // 운영진인지 확인하는 함수
-        const isAdmin = interaction.member.roles.cache.some(role => role.name === '노예왕');
+        const isAdmin = interaction.member.roles.cache.some(
+            role => role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당'
+        );
 
         if (
             interaction.customId === 'btnFirstTrue' ||
@@ -77,11 +79,17 @@ module.exports = async interaction => {
             interaction.customId === 'btnFalse'
         ) {
             // 역할이 용병인지 체크
-            if (interaction.member.roles.cache.some(role => role.name === '용병')) {
-                console.log('용병 투표 거절됨');
+            if (
+                interaction.member.roles.cache.some(role => role.name === '용병') ||
+                !interaction.member.roles.cache.some(
+                    role =>
+                        role.name === '접어' || role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당'
+                )
+            ) {
+                console.log('투표 권한 없음');
                 await interaction
                     .editReply({
-                        content: `❌ 용병은 투표에 참여할 수 없습니다.`,
+                        content: `❌ 투표 권한이 없습니다. 역할을 확인해주세요.`,
                         ephemeral: true,
                     })
                     .catch(console.error);
@@ -258,7 +266,7 @@ module.exports = async interaction => {
             if (!isAdmin) {
                 await interaction
                     .editReply({
-                        content: `❌ 권한이 없습니다. 투표 현황은 운영진만 볼 수 있습니다.`,
+                        content: `❌ 권한이 없습니다. 투표 현황은 관계자만 볼 수 있습니다.`,
                         ephemeral: true,
                     })
                     .catch(console.error);

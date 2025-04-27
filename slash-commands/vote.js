@@ -55,12 +55,17 @@ module.exports = {
 
         // 역할 확인: '응애'나 '노역꾼' 역할을 가지고 있는지 체크
         const hasRequiredRole = interaction.member.roles.cache.some(
-            role => role.name === '응애' || role.name === '노역꾼'
+            role => role.name === '운영진'
+            // role.name === '응애' ||
+            // role.name === '노역꾼' ||
+            // role.name === 'GANG' ||
+            // role.name === '돚거단' ||
+            // role.name === '포도당'
         );
 
         if (!hasRequiredRole) {
             await interaction.reply({
-                content: `투표에 참여하기 위해서는 '응애' 또는 '노역꾼' 역할이 필요합니다.`,
+                content: `투표를 진행하기 위해서는 '운영진' 역할이 필요합니다.`,
                 ephemeral: true,
             });
             return;
@@ -118,7 +123,15 @@ module.exports = {
                     if (
                         !member.roles.cache.some(role => role.name === '용병') &&
                         !member.user.bot &&
-                        member.roles.cache.some(role => role.name === '응애' || role.name === '노역꾼')
+                        member.roles.cache.some(
+                            role =>
+                                role.name === '응애' ||
+                                role.name === '노역꾼' ||
+                                role.name === 'GANG' ||
+                                role.name === '돚거단' ||
+                                role.name === '포도당' ||
+                                role.name === '접어'
+                        )
                     ) {
                         votingStatus.setStatus(member.displayName, '미투표');
                     }
