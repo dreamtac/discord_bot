@@ -1,17 +1,40 @@
 const { EmbedBuilder } = require('discord.js');
 const votingStatus = require('../votingStatus');
+const { PrismaClient } = require('../generated/prisma'); // Prisma 클라이언트 가져오기
+
+// Prisma 클라이언트 초기화
+const prisma = new PrismaClient();
 
 module.exports = {
     run: async ({ interaction }) => {
         await interaction.deferReply({ ephemeral: true });
-        if (votingStatus.isVotingClosed()) {
+
+        // 활성화된 투표가 있는지 확인
+        const activeVote = await prisma.vote.findFirst({
+            where: { isActive: true },
+        });
+
+        if (!activeVote) {
             await interaction.editReply({ content: '진행 중인 투표가 없습니다.', ephemeral: true });
             return;
         }
-        // 투표 종료 처리
-        votingStatus.closeVoting();
-        console.log(votingStatus.isVotingClosed());
-        await interaction.editReply({ content: '투표가 종료되었습니다.', ephemeral: true });
+
+        try {
+            // 투표 비활성화 처리
+            await prisma.vote.update({
+                where: { id: activeVote.id },
+                data: { isActive: false },
+            });
+
+            // 호환성을 위해 기존 votingStatus도 종료 처리
+            votingStatus.closeVoting();
+
+            await interaction.editReply({ content: '투표가 종료되었습니다.', ephemeral: true });
+            console.log(`투표 ID:${activeVote.id}가 종료되었습니다.`);
+        } catch (err) {
+            console.error('투표 종료 중 오류 발생:', err);
+            await interaction.editReply({ content: '투표 종료 중 오류가 발생했습니다.', ephemeral: true });
+        }
     },
 
     data: {

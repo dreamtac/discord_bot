@@ -1,10 +1,14 @@
 require('dotenv/config');
 const votingStatus = require('./votingStatus');
-const mongoose = require('mongoose');
+// const mongoose = require('mongoose'); // Mongoose 대신 Prisma 사용
 const { Client, IntentsBitField, GatewayIntentBits } = require('discord.js');
 const { CommandHandler } = require('djs-commander');
 const path = require('path');
 const moment = require('moment-timezone');
+const { PrismaClient } = require('./generated/prisma'); // Prisma 클라이언트 가져오기
+
+// Prisma 클라이언트 초기화
+const prisma = new PrismaClient();
 
 const client = new Client({
     intents: [
@@ -19,9 +23,20 @@ const client = new Client({
 
 async function connectDB() {
     try {
-        await mongoose.connect(process.env.DB_URI, {
-            dbName: process.env.NODE_ENV === 'development' ? 'testDB' : 'productionDB',
-        });
+        // 기존 Mongoose 연결 코드 주석 처리
+        // await mongoose.connect(process.env.DB_URI, {
+        //     dbName: process.env.NODE_ENV === 'development' ? 'testDB' : 'productionDB',
+        // });
+
+        // Prisma는 자동으로 .env의 DATABASE_URL을 사용하여 연결하므로 별도의 연결 코드가 필요 없음
+        // 단, Prisma 클라이언트가 정상적으로 연결되었는지 테스트
+        try {
+            // MongoDB에 적합한 연결 테스트
+            await prisma.$connect();
+            console.log('Connected to MongoDB via Prisma');
+        } catch (prismaErr) {
+            console.error('Prisma connection test failed:', prismaErr);
+        }
 
         await client.login(
             process.env.NODE_ENV === 'development' ? process.env.DICO_TOKEN_TEST : process.env.DICO_TOKEN
@@ -39,9 +54,9 @@ async function connectDB() {
         //     }
         // });
 
-        console.log('Connected to mongoDB');
+        // console.log('Connected to mongoDB');
     } catch (err) {
-        console.log(`Error connecting to DB: ${err}`);
+        console.log(`Error connecting to services: ${err}`);
     }
 }
 
@@ -94,4 +109,10 @@ client.on('voiceStateUpdate', (oldState, newState) => {
     }
 });
 
-module.exports = { voiceUser, client };
+// 애플리케이션 종료 시 Prisma 클라이언트 연결 종료
+process.on('beforeExit', async () => {
+    await prisma.$disconnect();
+    console.log('Disconnected from Prisma');
+});
+
+module.exports = { voiceUser, client, prisma }; // prisma 클라이언트도 내보내기

@@ -15,12 +15,41 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  discordId   String
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  discordId   String       @unique
   displayName String
-  status      String
-  number      Int
-  date        DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  roles       String[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  // 유저와 투표 상태 간의 관계
+  voteStatus  VoteStatus[]
+}
+
+model Vote {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  date        String
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  // 투표와 유저 투표 상태 간의 관계
+  voteStatus  VoteStatus[]
+}
+
+model VoteStatus {
+  id     String   @id @default(auto()) @map("_id") @db.ObjectId
+  status String   @default("미투표") // "우선참여", "참여", "불참", "미투표"
+  number Int?
+  date   DateTime @default(now())
+
+  // 관계 설정
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+
+  voteId String @db.ObjectId
+  vote   Vote   @relation(fields: [voteId], references: [id])
+
+  // 유저당 하나의 투표에 하나의 상태만 가질 수 있도록 복합 인덱스 설정
+  @@unique([userId, voteId])
 }
