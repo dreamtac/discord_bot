@@ -8,19 +8,78 @@ const { PrismaClient } = require('./generated/prisma');
 // Prisma 클라이언트 초기화
 const prisma = new PrismaClient();
 
+// 메모리 캐시 (성능 최적화용)
 let votingStatus = {}; // 각 유저별 투표 상태를 저장할 객체
 let order = []; // 투표 순서 기록용 배열
 let votingClosed = true; // 투표 종료 상태를 관리하는 변수
+let activeVoteId = null; // 현재 활성화된 투표 ID
+let votingMessage = null; // 현재 투표 메시지
 
+// 투표 상태를 DB에서 메모리로 로드하는 함수
+async function loadVotingStatusFromDB() {
+    try {
+        // 활성화된 투표 찾기
+        const activeVote = await prisma.vote.findFirst({
+            where: { isActive: true },
+            include: {
+                voteStatus: {
+                    include: {
+                        user: true,
+                    },
+                    orderBy: {
+                        number: 'asc',
+                    },
+                },
+            },
+        });
+
+        if (!activeVote) {
+            console.log('활성화된 투표가 없습니다.');
+            votingClosed = true;
+            votingStatus = {};
+            order = [];
+            activeVoteId = null;
+            return false;
+        }
+
+        // 메모리 상태 초기화
+        votingClosed = false;
+        activeVoteId = activeVote.id;
+        votingStatus = {};
+        order = [];
+
+        // 투표 상태 로드
+        activeVote.voteStatus.forEach(status => {
+            const userDisplayName = status.user.displayName;
+            votingStatus[userDisplayName] = status.status;
+
+            // 순서 업데이트
+            if ((status.status === '우선참여' || status.status === '참여') && status.number) {
+                // number 값이 있으면 해당 위치에 삽입
+                while (order.length < status.number) {
+                    order.push(null);
+                }
+                order[status.number - 1] = userDisplayName;
+            }
+        });
+
+        // 배열에서 null 값 제거 (압축)
+        order = order.filter(item => item !== null);
+
+        console.log(`투표 상태가 DB에서 로드되었습니다. 총 ${Object.keys(votingStatus).length}명의 상태가 로드됨.`);
+        return true;
+    } catch (err) {
+        console.error('DB에서 투표 상태 로드 중 오류 발생:', err);
+        return false;
+    }
+}
+
+// 큐 시스템 (동시성 문제 방지)
 let queue = [];
 let queueRunning = false;
-let votingMessage = null;
 
-// 큐에 있는 작업들(task) 가 0개가 될 때까지 하나씩 꺼내서 실행.
-// 작업들은 유저가 우선참여, 참여, 불참 버튼을 눌렀을때 수행하는 작업들을 의미.
 const runQueue = async () => {
     while (queue.length > 0) {
-        // console.log('큐 작업중...');
         const task = queue.shift();
         await task();
     }
@@ -28,20 +87,18 @@ const runQueue = async () => {
 };
 
 module.exports = {
+    // 현재 투표 메시지 설정
     setMessage: async message => {
-        // todo: db에 객체 저장
         votingMessage = message;
 
-        // Mongoose 대신 Prisma 사용
-        // await VotingState.findOneAndUpdate({}, { closed: false }, { upsert: true });
-
-        // 실제 구현에서는 활성화된 투표가 있는지 찾아서 메시지를 연결
         try {
+            // 활성화된 투표 재확인
             const activeVote = await prisma.vote.findFirst({
                 where: { isActive: true },
             });
 
             if (activeVote) {
+                activeVoteId = activeVote.id;
                 console.log(`활성화된 투표 ID:${activeVote.id}에 메시지 연결됨`);
             } else {
                 console.log('활성화된 투표가 없습니다.');
@@ -50,124 +107,189 @@ module.exports = {
             console.error('투표 메시지 설정 중 오류 발생:', err);
         }
     },
+
+    // 메시지 객체 반환
     getMessage: () => votingMessage,
+
+    // 현재 메모리에 있는 투표 상태 반환 (실시간 응답용)
     getStatus: () => votingStatus,
+
+    // 투표 상태 설정 (활성화/비활성화)
     setVotingActiveStatus: status => {
         votingClosed = !status; // status가 true면 votingClosed는 false
         console.log(`투표 상태가 ${status ? '활성화' : '비활성화'}되었습니다.`);
     },
+
+    // 사용자의 투표 상태 설정 (DB 동기화 포함)
     setStatus: async (userId, status) => {
         // userId가 유효한지 확인
         if (!userId) {
             console.error('유효하지 않은 userId:', userId);
-            return; // 유효하지 않으면 처리하지 않음
+            return;
         }
 
-        if (!votingClosed) {
-            // console.log('큐에 작업 추가 중...');
-            await new Promise(resolve => {
-                queue.push(async () => {
-                    try {
-                        // console.log('Processing queue task for: ', userId);
-                        votingStatus[userId] = status;
-                        const existingIndex = order.indexOf(userId);
+        // 투표가 종료되었는지 확인
+        if (votingClosed) {
+            console.log('투표가 종료되어 상태를 변경할 수 없습니다.');
+            return;
+        }
 
-                        if (status === '우선참여' || status === '참여') {
-                            if (existingIndex === -1) {
-                                order.push(userId);
-                            } else {
-                                order[existingIndex] = null;
-                                order.push(userId);
-                            }
+        // 활성화된 투표가 없으면 상태 로드 시도
+        if (!activeVoteId) {
+            await loadVotingStatusFromDB();
+            if (!activeVoteId) {
+                console.error('활성화된 투표가 없어 상태를 변경할 수 없습니다.');
+                return;
+            }
+        }
 
-                            const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-                            let number = order.length;
+        // 큐에 작업 추가 (비동기 작업 관리)
+        await new Promise(resolve => {
+            queue.push(async () => {
+                try {
+                    // 메모리 상태 업데이트
+                    votingStatus[userId] = status;
+                    const existingIndex = order.indexOf(userId);
 
-                            // 이 부분은 실제 API 사용 시에 구현 필요
-                            // Prisma를 사용한 업데이트는 각 명령어 파일에서 처리
+                    let number = null;
 
-                            /* Mongoose 코드 주석 처리
-                            await MemberDB.findOneAndUpdate(
-                                { nickName: userId },
-                                { status, number: number, date: krTime },
-                                { upsert: true, new: true }
-                            );
-                            */
-                        } else if (status === '불참' || status === '미투표') {
-                            if (existingIndex !== -1) {
-                                order[existingIndex] = null;
-                            }
-                            const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-
-                            /* Mongoose 코드 주석 처리
-                            await MemberDB.findOneAndUpdate(
-                                { nickName: userId },
-                                { status, number: null, date: krTime },
-                                { upsert: true, new: true }
-                            );
-                            */
+                    // 참여 상태일 경우 순서 업데이트
+                    if (status === '우선참여' || status === '참여') {
+                        if (existingIndex === -1) {
+                            order.push(userId);
+                            number = order.length;
+                        } else {
+                            order.splice(existingIndex, 1); // 기존 위치에서 제거
+                            order.push(userId); // 배열 끝에 추가
+                            number = order.length;
                         }
-                    } catch (err) {
-                        console.error('Error processing task:', err);
-                    } finally {
-                        // console.log('작업 완료');
-                        resolve();
+                    } else if (status === '불참' || status === '미투표') {
+                        // 불참 또는 미투표인 경우 배열에서 제거
+                        if (existingIndex !== -1) {
+                            order.splice(existingIndex, 1);
+                        }
                     }
-                });
 
-                // console.log('queue:', queue);
-                // console.log('큐 실행 준비 중...');
-                if (!queueRunning) {
-                    // console.log('큐 실행 시작');
-                    queueRunning = true;
-                    runQueue();
+                    // DB 상태 업데이트
+                    try {
+                        // 1. 사용자 검색
+                        const user = await prisma.user.findFirst({
+                            where: { displayName: userId },
+                        });
+
+                        if (!user) {
+                            console.error(`사용자를 찾을 수 없음: ${userId}`);
+                            return;
+                        }
+
+                        // 2. 투표 상태 업데이트
+                        await prisma.voteStatus.updateMany({
+                            where: {
+                                userId: user.id,
+                                voteId: activeVoteId,
+                            },
+                            data: {
+                                status,
+                                number,
+                                date: new Date(),
+                            },
+                        });
+
+                        console.log(
+                            `${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: ${number || '없음'})`
+                        );
+                    } catch (dbErr) {
+                        console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
+                    }
+                } catch (err) {
+                    console.error('Error processing task:', err);
+                } finally {
+                    resolve();
                 }
             });
-        }
+
+            if (!queueRunning) {
+                queueRunning = true;
+                runQueue();
+            }
+        });
     },
+
+    // 투표 초기화 및 시작
     openVoting: async () => {
         //************초기화 코드************//
-        order = []; //기존 배열 초기화
+        order = []; // 기존 배열 초기화
         votingStatus = {}; // 유저별 투표 상태 초기화
-        queue = []; //비동기 작업 큐 초기화
+        queue = []; // 비동기 작업 큐 초기화
         queueRunning = false; // 큐 작업 상태 초기화
         votingClosed = true; // 투표 종료 상태로 초기화
-
-        // Mongoose 코드 주석 처리
-        // await MemberDB.collection.drop(); //컬렉션 삭제
-        // await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
-
-        const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-        console.log(`투표 데이터 초기화 완료! - ${krTime}`);
         //************초기화 코드************//
 
+        // 메모리 상태를 DB와 동기화
+        await loadVotingStatusFromDB();
+
         votingClosed = false;
-        // Mongoose 코드 주석 처리
-        // await VotingState.findOneAndUpdate({}, { closed: false }, { upsert: true }); // db 투표 진행 상황 초기화
+        const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
         console.log(`투표 시작됨! - ${krTime}`);
     },
-    closeVoting: async () => {
-        // Mongoose 코드 주석 처리
-        // await VotingState.findOneAndUpdate({}, { closed: true }, { upsert: true });
 
+    // 투표 종료
+    closeVoting: async () => {
         try {
             // 활성화된 투표가 있다면 비활성화
             await prisma.vote.updateMany({
                 where: { isActive: true },
                 data: { isActive: false },
             });
+
+            // 메모리 상태 초기화
+            activeVoteId = null;
+            votingClosed = true;
+
+            const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
+            console.log(`투표 종료됨! - ${krTime}`);
         } catch (err) {
             console.error('투표 종료 중 오류 발생:', err);
         }
-
-        const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
-        console.log(`투표 종료됨! - ${krTime}`);
-        votingClosed = true;
     },
+
+    // 투표 종료 상태 확인
     isVotingClosed: () => {
         return votingClosed;
     },
-    getResult: () => {
+
+    // DB에서 투표 종료 상태 확인 (필요시 DB 조회)
+    checkVotingClosedInDB: async () => {
+        // DB에서도 확인
+        if (!votingClosed) {
+            try {
+                const activeVote = await prisma.vote.findFirst({
+                    where: { isActive: true },
+                });
+
+                // DB에 활성화된 투표가 없으면 종료 상태로 설정
+                if (!activeVote) {
+                    votingClosed = true;
+                    activeVoteId = null;
+                }
+            } catch (err) {
+                console.error('투표 상태 확인 중 오류 발생:', err);
+            }
+        }
+
+        return votingClosed;
+    },
+
+    // 투표 결과 계산
+    getResult: (forceRefresh = false) => {
+        // DB에서 최신화는 비동기로 별도 함수로 분리
+        if (forceRefresh) {
+            console.log(
+                '※ 강제 새로고침 요청됨 - getResult(true)는 비추천, refreshFromDB() 후 getResult()를 사용하세요.'
+            );
+        }
+
+        // 현재 메모리에 있는 상태로 결과 계산
         const totalUsers = Object.keys(votingStatus).length;
         const specialParticipated = Object.values(votingStatus).filter(status => status === '우선참여').length;
         const participated = Object.values(votingStatus).filter(status => status === '참여').length;
@@ -175,9 +297,11 @@ module.exports = {
         const notVoted = Object.values(votingStatus).filter(status => status === '미투표').length;
         const voteRate = `${specialParticipated + participated + notParticipated}/${totalUsers}`;
 
+        // 참여자 정렬된 목록 생성
         let specialParticipatedUser = [];
         let participatedUser = [];
 
+        // 순서대로 참여자 추가
         order.forEach(userId => {
             if (votingStatus[userId] === '우선참여') {
                 specialParticipatedUser.push(userId);
@@ -186,15 +310,32 @@ module.exports = {
             }
         });
 
-        // 투표 상태가 '불참'인 유저 목록을 필터링
-        const notParticipatedUser = Object.entries(votingStatus)
-            .filter(([userId, status]) => status === '불참')
-            .map(([userId]) => userId); // 참여한 유저들의 ID 목록
+        // 순서 없는 경우를 위한 백업 처리
+        const allParticipants = Object.entries(votingStatus);
 
-        // 투표 상태가 '미투표'인 유저 목록을 필터링
-        const notVotedUser = Object.entries(votingStatus)
+        // 우선참여 사용자 중 누락된 사용자 추가
+        allParticipants.forEach(([userId, status]) => {
+            if (status === '우선참여' && !specialParticipatedUser.includes(userId)) {
+                specialParticipatedUser.push(userId);
+            }
+        });
+
+        // 참여 사용자 중 누락된 사용자 추가
+        allParticipants.forEach(([userId, status]) => {
+            if (status === '참여' && !participatedUser.includes(userId)) {
+                participatedUser.push(userId);
+            }
+        });
+
+        // 불참 사용자 목록
+        const notParticipatedUser = allParticipants
+            .filter(([userId, status]) => status === '불참')
+            .map(([userId]) => userId);
+
+        // 미투표 사용자 목록
+        const notVotedUser = allParticipants
             .filter(([userId, status]) => status === '미투표')
-            .map(([userId]) => userId); // 미투표 유저들의 ID 목록
+            .map(([userId]) => userId);
 
         return {
             totalUsers,
@@ -203,103 +344,161 @@ module.exports = {
             notParticipated,
             notVoted,
             voteRate,
-            specialParticipatedUser,
-            participatedUser,
-            notParticipatedUser,
-            notVotedUser,
+            specialParticipatedUser: specialParticipatedUser || [],
+            participatedUser: participatedUser || [],
+            notParticipatedUser: notParticipatedUser || [],
+            notVotedUser: notVotedUser || [],
         };
     },
 
-    //서버 재시작 시 투표 상태 복원
+    // DB에서 결과 새로고침 후 반환 (비동기 함수)
+    getResultFromDB: async () => {
+        // DB에서 상태 최신화
+        await loadVotingStatusFromDB();
+        // 최신화된 상태로 결과 계산
+        return module.exports.getResult(false);
+    },
+
+    // 서버 재시작 시 투표 상태 복원
     restoreVotingStatus: async client => {
         try {
-            // Mongoose 코드 주석 처리
-            // const votingState = await VotingState.findOne({});
-            // if (votingState && !votingState.closed) {
+            // DB에서 상태 로드
+            const success = await loadVotingStatusFromDB();
 
-            // Prisma를 사용하여 활성화된 투표 확인
-            const activeVote = await prisma.vote.findFirst({
-                where: { isActive: true },
-                include: {
-                    voteStatus: {
-                        include: {
-                            user: true,
-                        },
-                    },
-                },
-            });
-
-            if (activeVote) {
-                votingClosed = false; //투표가 종료되지 않았다면 투표를 자동으로 활성화 상태로 변경
-
-                // 투표 상태 메모리에 복원
-                order = [];
-                votingStatus = {};
-
-                activeVote.voteStatus.forEach(status => {
-                    const userDisplayName = status.user.displayName;
-                    votingStatus[userDisplayName] = status.status;
-
-                    if (status.status === '우선참여' || status.status === '참여') {
-                        // status.number가 정의되어 있는 경우에만 배열에 추가
-                        if (status.number !== null && status.number !== undefined) {
-                            order[status.number - 1] = userDisplayName;
-                        }
-                    }
+            if (success) {
+                // 활성화된 투표가 있을 경우 메시지 재생성
+                const activeVote = await prisma.vote.findFirst({
+                    where: { isActive: true },
                 });
 
-                await restoreVotingMessage(client, activeVote);
-                console.log('투표 상태가 복원되었습니다.');
+                if (activeVote) {
+                    await restoreVotingMessage(client, activeVote);
+                    console.log('투표 상태가 복원되었습니다.');
+                }
             }
         } catch (err) {
             console.error('투표 상태 복원 중 오류 발생:', err);
         }
     },
+
+    // DB 상태 새로고침
+    refreshFromDB: async () => {
+        return await loadVotingStatusFromDB();
+    },
+
+    // 내부 순서 배열 접근 (닉네임 변경 처리용)
+    _getOrder: () => {
+        return order;
+    },
 };
 
+// 투표 메시지 복원 함수
 async function restoreVotingMessage(client, activeVote) {
-    const embed = new EmbedBuilder()
-        .setColor(0x0099ff)
-        .setTitle('공성/거점 투표')
-        .addFields(
-            { name: '일시', value: activeVote.date || '서버 재시작 후 투표 복구됨' },
-            { name: '안내 사항', value: activeVote.description || '예기치 못한 에러로 복구된 투표입니다.' }
-        )
-        .setFooter({ text: '• 상호작용 실패 문구가 뜨면 잠시후(10초) 다시 시도해 주세요 •' });
+    try {
+        // 먼저 DB에서 해당 투표 메시지 ID 확인
+        const existingVoteMessage = await prisma.voteMessage.findFirst({
+            where: { voteId: activeVote.id },
+        });
 
-    const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel('우선참여 (특수병)').setCustomId('btnFirstTrue').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setLabel('참여').setCustomId('btnTrue').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setLabel('불참').setCustomId('btnFalse').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setLabel('참여 현황').setCustomId('btnResultParticipated').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setLabel('불참/미투표 현황')
-            .setCustomId('btnResultNotParticipated')
-            .setStyle(ButtonStyle.Secondary)
-    );
+        // 이미 메시지가 존재하는 경우 복원 작업 중지
+        if (existingVoteMessage && existingVoteMessage.messageId) {
+            console.log(`이미 투표 메시지가 존재합니다. 메시지 ID: ${existingVoteMessage.messageId}`);
 
-    // 이전 메시지 삭제
-    if (votingMessage) {
-        try {
-            await votingMessage.delete(); // 이전 메시지 삭제
-            console.log('이전 투표 메시지가 삭제되었습니다.');
-        } catch (error) {
-            console.error('이전 투표 메시지 삭제 중 오류 발생:', error);
+            // 기존 메시지 가져오기 시도
+            try {
+                const guild =
+                    process.env.NODE_ENV === 'development'
+                        ? await client.guilds.fetch(process.env.TEST_SERVER_ID)
+                        : await client.guilds.fetch(process.env.PRODUCTION_SERVER_ID);
+
+                const channel =
+                    process.env.NODE_ENV === 'development'
+                        ? await guild.channels.fetch(process.env.TEST_CHANNEL_ID)
+                        : await guild.channels.fetch(process.env.PRODUCTION_CHANNEL_ID);
+
+                // 기존 메시지 가져오기 시도
+                try {
+                    const existingMessage = await channel.messages.fetch(existingVoteMessage.messageId);
+                    if (existingMessage) {
+                        module.exports.setMessage(existingMessage); // 기존 메시지 저장
+                        console.log('기존 투표 메시지를 찾아 연결했습니다.');
+                        return; // 함수 종료
+                    }
+                } catch (fetchError) {
+                    console.log('기존 메시지를 가져올 수 없어 새 메시지를 생성합니다:', fetchError.message);
+                    // 메시지를 가져오지 못한 경우 새 메시지 생성 진행
+                }
+            } catch (error) {
+                console.error('채널 또는 서버 가져오기 중 오류 발생:', error);
+            }
         }
+
+        // 서버 객체 및 채널 객체 가져오기
+        const guild =
+            process.env.NODE_ENV === 'development'
+                ? await client.guilds.fetch(process.env.TEST_SERVER_ID)
+                : await client.guilds.fetch(process.env.PRODUCTION_SERVER_ID);
+
+        const channel =
+            process.env.NODE_ENV === 'development'
+                ? await guild.channels.fetch(process.env.TEST_CHANNEL_ID)
+                : await guild.channels.fetch(process.env.PRODUCTION_CHANNEL_ID);
+
+        // 새 메시지 생성을 위한 임베드 및 버튼 설정 - /투표 명령어와 동일한 디자인 사용
+        const embed = new EmbedBuilder()
+            .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
+            .setTitle(`📢 ${activeVote.region} 공성/거점 투표`)
+            .setDescription(`${activeVote.description || '서버 재시작으로 복원된 투표입니다.'}`)
+            .addFields(
+                { name: '📅 일시', value: `\`${activeVote.date || '정보 없음'}\``, inline: true },
+                { name: '🌐 지역', value: `\`${activeVote.region || '정보 없음'}\``, inline: true },
+                { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
+                {
+                    name: '📌 주의사항',
+                    value: '투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.',
+                }
+            )
+            .setFooter({
+                text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
+            });
+
+        const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('우선참여 (특수병)').setCustomId('btnFirstTrue').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setLabel('참여').setCustomId('btnTrue').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setLabel('불참').setCustomId('btnFalse').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setLabel('참여 현황')
+                .setCustomId('btnResultParticipated')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setLabel('불참/미투표 현황')
+                .setCustomId('btnResultNotParticipated')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        // 이전 메시지 삭제 시도
+        if (votingMessage) {
+            try {
+                await votingMessage.delete();
+                console.log('이전 투표 메시지가 삭제되었습니다.');
+            } catch (error) {
+                console.error('이전 투표 메시지 삭제 중 오류 발생:', error);
+            }
+        }
+
+        // 새로운 메시지를 생성하고 저장
+        const message = await channel.send({ embeds: [embed], components: [buttons] });
+        module.exports.setMessage(message); // 메시지 저장
+
+        // 메시지 ID를 DB에 저장 또는 업데이트
+        await prisma.voteMessage.upsert({
+            where: { voteId: activeVote.id },
+            update: { messageId: message.id },
+            create: { voteId: activeVote.id, messageId: message.id },
+        });
+
+        console.log(`투표 메시지가 생성되고 ID(${message.id})가 DB에 저장되었습니다.`);
+    } catch (err) {
+        console.error('투표 메시지 복원 중 오류 발생:', err);
     }
-
-    const guild =
-        process.env.NODE_ENV === 'development'
-            ? await client.guilds.fetch(process.env.TEST_SERVER_ID)
-            : await client.guilds.fetch(process.env.PRODUCTION_SERVER_ID); // 서버 ID 가져오기
-
-    const channel =
-        process.env.NODE_ENV === 'development'
-            ? await guild.channels.fetch(process.env.TEST_CHANNEL_ID)
-            : await guild.channels.fetch(process.env.PRODUCTION_CHANNEL_ID); // 채널 ID 가져오기
-
-    // 새로운 메시지를 생성하고 저장
-    const message = await channel.send({ embeds: [embed], components: [buttons] });
-    module.exports.setMessage(message); // 메시지 저장
-    console.log('투표 메시지가 복구되었습니다.');
 }

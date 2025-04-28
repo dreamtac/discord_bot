@@ -7,12 +7,20 @@ const {
     ButtonBuilder,
     ButtonStyle,
     SlashCommandBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder,
 } = require('discord.js');
-const moment = require('moment-timezone'); // moment-timezone 모듈 추가
 const { PrismaClient } = require('../generated/prisma'); // Prisma 클라이언트 가져오기
-
+const {
+    CREATE_VOTE_PERMISSIONS,
+    CREATE_VOTE_PERMISSIONS_DEV,
+    REGION_SELECT_MENU_OPTIONS,
+    VOTE_PERMISSIONS,
+} = require('../utils/constants');
+const { validateDate } = require('../utils/dateValidator'); // 날짜 검증 유틸리티 추가
 // Prisma 클라이언트 초기화
 const prisma = new PrismaClient();
+const isDevMode = process.env.NODE_ENV === 'development';
 
 // votingStatus 모듈은 계속 사용 (현재 코드와의 호환성 유지를 위해)
 const votingStatus = require('../votingStatus');
@@ -20,11 +28,24 @@ const votingStatus = require('../votingStatus');
 module.exports = {
     run: async ({ interaction }) => {
         // 역할 확인: '응애'나 '노역꾼' 역할을 가지고 있는지 체크
-        if (process.env.NODE_ENV !== 'development') {
-            const hasRequiredRole = interaction.member.roles.cache.some(role => role.name === '운영진');
+        if (!isDevMode) {
+            const hasRequiredRole = interaction.member.roles.cache.some(role =>
+                CREATE_VOTE_PERMISSIONS.includes(role.name)
+            );
             if (!hasRequiredRole) {
                 await interaction.reply({
-                    content: `투표를 진행하기 위해서는 '운영진' 역할이 필요합니다.`,
+                    content: `투표를 진행하기 위해서는 '운영진' 또는 '관리자' 역할이 필요합니다.`,
+                    ephemeral: true,
+                });
+                return;
+            }
+        } else {
+            const hasRequiredRole = interaction.member.roles.cache.some(role =>
+                CREATE_VOTE_PERMISSIONS_DEV.includes(role.name)
+            );
+            if (!hasRequiredRole) {
+                await interaction.reply({
+                    content: `투표를 진행하기 위해서는 '노역꾼' 역할이 필요합니다.`,
                     ephemeral: true,
                 });
                 return;
@@ -44,10 +65,10 @@ module.exports = {
             return;
         }
 
-        // 모달 생성
+        // 모달 생성 - 먼저 날짜와 설명을 입력받음
         const modal = new ModalBuilder({
             customId: `voteModal`,
-            title: `투표`,
+            title: `투표 정보 입력`,
         });
 
         const voteTitle = new TextInputBuilder({
@@ -60,10 +81,10 @@ module.exports = {
 
         const voteDescription = new TextInputBuilder({
             customId: `inputDescription`,
-            label: `공성/거점 정보를 입력해주세요.`,
-            placeholder: `ex) 08/20 칼페온/카마실비아 거점 투표`,
+            label: `공성/거점에 대한 추가 정보를 입력해주세요.`,
+            placeholder: `ex) 추가 정보를 입력하세요`,
             style: TextInputStyle.Paragraph,
-            required: true,
+            required: false,
         });
 
         const firstActionRow = new ActionRowBuilder().addComponents(voteTitle);
@@ -74,16 +95,77 @@ module.exports = {
         await interaction.showModal(modal);
 
         // 제출 처리
-        const filter = interaction => interaction.customId === `voteModal`;
+        const filter = i => i.customId === `voteModal` && i.user.id === interaction.user.id;
 
-        interaction
-            .awaitModalSubmit({ filter, time: 600000 })
-            .then(async modalInteraction => {
-                // 개발 모드인지 여부 확인
-                const isDevMode = process.env.NODE_ENV === 'development';
+        try {
+            const modalInteraction = await interaction.awaitModalSubmit({ filter, time: 600000 });
 
-                // 모달 응답 시 로딩 메시지 표시 (개발 모드에서는 ephemeral: true)
-                await modalInteraction.deferReply({ ephemeral: isDevMode });
+            // 모달 응답 시 로딩 메시지 표시
+            await modalInteraction.deferReply({ ephemeral: isDevMode });
+
+            const date = modalInteraction.fields.getTextInputValue('inputDate');
+            const additionalDescription = modalInteraction.fields.getTextInputValue('inputDescription');
+
+            // 날짜 형식 및 유효성 검증 - 외부 유틸리티 사용
+            const dateValidation = validateDate(date);
+
+            if (!dateValidation.isValid) {
+                await modalInteraction.editReply({
+                    content: `⚠️ ${dateValidation.errorMessage}`,
+                    ephemeral: true,
+                });
+                return;
+            }
+
+            const formattedDate = dateValidation.formattedDate;
+
+            // 지역 선택 메뉴 표시
+            const regionSelect = new StringSelectMenuBuilder()
+                .setCustomId('region-select')
+                .setPlaceholder('공성/거점 지역을 선택하세요');
+
+            // constants.js에서 가져온 옵션 사용
+            REGION_SELECT_MENU_OPTIONS.forEach(option => {
+                regionSelect.addOptions(
+                    new StringSelectMenuOptionBuilder()
+                        .setLabel(option.label)
+                        .setDescription(option.description)
+                        .setValue(option.value)
+                );
+            });
+
+            const selectRow = new ActionRowBuilder().addComponents(regionSelect);
+
+            // 입력한 정보를 포함한 임베드 생성
+            const infoEmbed = new EmbedBuilder()
+                .setColor(0x0099ff)
+                .setTitle('투표 정보')
+                .addFields(
+                    { name: '날짜', value: formattedDate },
+                    { name: '추가 정보', value: additionalDescription || '없음' }
+                )
+                .setFooter({ text: '지역을 선택하여 투표를 시작하세요.' });
+
+            // 지역 선택 메시지 전송
+            await modalInteraction.editReply({
+                embeds: [infoEmbed],
+                components: [selectRow],
+                ephemeral: isDevMode,
+            });
+
+            // 지역 선택 메뉴 응답 대기
+            const regionFilter = i => i.customId === 'region-select' && i.user.id === interaction.user.id;
+            const regionCollection = modalInteraction.channel.createMessageComponentCollector({
+                filter: regionFilter,
+                time: 60000,
+                max: 1,
+            });
+
+            regionCollection.on('collect', async regionInteraction => {
+                await regionInteraction.deferUpdate();
+
+                // 선택된 지역
+                const selectedRegion = regionInteraction.values[0];
 
                 // 투표 준비 중임을 알리는 임베드
                 const loadingEmbed = new EmbedBuilder()
@@ -92,18 +174,21 @@ module.exports = {
                     .setDescription('투표를 준비하고 있습니다. 잠시만 기다려주세요...')
                     .setFooter({ text: '데이터베이스 작업 진행 중' });
 
-                await modalInteraction.editReply({ embeds: [loadingEmbed] });
-
-                const date = modalInteraction.fields.getTextInputValue('inputDate');
-                const description = modalInteraction.fields.getTextInputValue('inputDescription');
+                await modalInteraction.editReply({
+                    embeds: [loadingEmbed],
+                    components: [],
+                });
 
                 try {
                     // 1. 새 투표 생성
+                    const description = `안내사항\n${additionalDescription || '없음'}`;
+
                     const newVote = await prisma.vote.create({
                         data: {
-                            title: `공성/거점 투표: ${date}`,
+                            title: `공성/거점 투표: ${formattedDate} ${selectedRegion}`,
                             description: description,
-                            date: date,
+                            date: formattedDate,
+                            region: selectedRegion,
                             isActive: true,
                         },
                     });
@@ -129,15 +214,7 @@ module.exports = {
                         const hasYongbyungRole = member.roles.cache.some(role => role.name === '용병');
 
                         // 필요한 역할 체크
-                        const hasRequiredRole = member.roles.cache.some(
-                            role =>
-                                role.name === '응애' ||
-                                role.name === '노역꾼' ||
-                                role.name === 'GANG' ||
-                                role.name === '돚거단' ||
-                                role.name === '포도당' ||
-                                role.name === '접어'
-                        );
+                        const hasRequiredRole = member.roles.cache.some(role => VOTE_PERMISSIONS.includes(role.name));
 
                         return !isBot && !hasYongbyungRole && hasRequiredRole;
                     });
@@ -428,10 +505,21 @@ module.exports = {
                     const buttons = new ActionRowBuilder().addComponents(button, button1, button2, button3, button4);
 
                     const embed = new EmbedBuilder()
-                        .setColor(0x0099ff)
-                        .setTitle('공성/거점 투표')
-                        .addFields({ name: '일시', value: date }, { name: '안내 사항', value: description })
-                        .setFooter({ text: '• 상호작용 실패 문구가 뜨면 잠시후(10초) 다시 시도해 주세요 •' });
+                        .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
+                        .setTitle(`📢 공성/거점 투표`)
+                        .addFields(
+                            { name: '📅 일시', value: `\`${formattedDate}\``, inline: true },
+                            { name: '🌐 지역', value: `\`${selectedRegion}\``, inline: true },
+                            { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
+                            {
+                                name: '📌 주의사항',
+                                value: '투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.',
+                            }
+                        )
+                        .setDescription(`${description}`)
+                        .setFooter({
+                            text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
+                        });
 
                     let message;
 
@@ -483,14 +571,29 @@ module.exports = {
                     // 오류 발생 시 투표 상태 초기화
                     votingStatus.closeVoting();
                 }
-            })
-            .catch(err => {
-                console.log(`Error: ${err}`);
-                interaction.followUp({
-                    content: "error - '프리덤'에게 문의 주세요!!",
-                    ephemeral: true,
-                });
             });
+        } catch (err) {
+            console.error('투표 초기화 중 오류 발생:', err);
+
+            // 에러 발생 시 생성된 투표가 있다면 비활성화
+            try {
+                await prisma.vote.updateMany({
+                    where: { isActive: true },
+                    data: { isActive: false },
+                });
+            } catch (cleanupErr) {
+                console.error('투표 정리 중 오류 발생:', cleanupErr);
+            }
+
+            await interaction.editReply({
+                content: '투표 초기화 중 오류가 발생했습니다. 다시 시도해주세요.',
+                embeds: [],
+                components: [],
+            });
+
+            // 오류 발생 시 투표 상태 초기화
+            votingStatus.closeVoting();
+        }
     },
 
     data: new SlashCommandBuilder().setName('투표').setDescription('투표를 시작합니다.'),

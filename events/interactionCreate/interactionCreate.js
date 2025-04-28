@@ -1,20 +1,15 @@
 const { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const votingStatus = require('../../votingStatus');
-const votingStateDB = require('../../models/votingStateDB');
 const { voiceUser } = require('../..');
 const jwt = require('jsonwebtoken');
+const { PrismaClient } = require('../../generated/prisma');
+
+// Prisma 클라이언트 초기화
+const prisma = new PrismaClient();
 
 module.exports = async interaction => {
     if (!interaction.isButton()) return;
     if (interaction.customId.startsWith('confirm_') || interaction.customId === 'cancel') return;
-    // if (votingStatus.isVotingClosed()) {
-    //     await interaction.editReply({
-    //         content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-    //         ephemeral: true,
-    //     });
-    //     setTimeout(() => interaction.deleteReply(), 5000);
-    //     return;
-    // }
 
     const moment = require('moment-timezone');
     const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
@@ -73,6 +68,18 @@ module.exports = async interaction => {
             role => role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당' || role.name === '접어'
         );
 
+        // 투표 진행 상태 DB에서 최신화 (한 번만 로드)
+        const isClosed = await votingStatus.checkVotingClosedInDB();
+
+        // 종료된 상태면 DB 로드할 필요 없음
+        if (!isClosed) {
+            // DB에서 최신 상태 가져오기 (함수 내에서 한 번만)
+            await votingStatus.refreshFromDB();
+        }
+
+        // 결과 미리 가져오기 (안전하게 처리)
+        let votingResult = votingStatus.getResult();
+
         if (
             interaction.customId === 'btnFirstTrue' ||
             interaction.customId === 'btnTrue' ||
@@ -103,8 +110,9 @@ module.exports = async interaction => {
                     return;
                 }
             }
+
             //투표가 종료되었는지 체크
-            if (votingStatus.isVotingClosed()) {
+            if (isClosed) {
                 console.log(`투표 종료로 요청 거절됨`);
                 await interaction
                     .editReply({
@@ -117,9 +125,10 @@ module.exports = async interaction => {
                 }, 5000);
                 return;
             }
+
             //동일한 상태로 투표하려는지 체크 (참여 -> 참여, 우선참여 -> 우선참여)
             const currentStatus = votingStatus.getStatus()[userId]; //유저의 현재 상태 가져오기
-            console.log(currentStatus);
+            console.log(`현재 상태: ${currentStatus}`);
             let newStatus = '';
 
             if (interaction.customId === 'btnFirstTrue') newStatus = '우선참여';
@@ -173,6 +182,7 @@ module.exports = async interaction => {
 
                     // 버튼 응답에 따라 처리합니다
                     if (confirmation.customId === `confirm_${newStatus}`) {
+                        // 한번 더 투표 종료 여부 확인 (상태만 체크, DB 로드 안함)
                         if (votingStatus.isVotingClosed()) {
                             await interaction
                                 .editReply({
@@ -182,7 +192,10 @@ module.exports = async interaction => {
                                 .catch(console.error);
                             return;
                         }
+
+                        // 투표 상태 업데이트 (DB 동기화)
                         await votingStatus.setStatus(userId, newStatus);
+
                         await interaction
                             .editReply({
                                 content: `✅ ${newStatus}로 변경되었습니다.`,
@@ -190,72 +203,67 @@ module.exports = async interaction => {
                                 ephemeral: true,
                             })
                             .catch(console.error);
-                        const result = votingStatus.getResult();
-                        await updateEmbedMessage(result);
+
+                        // 결과 업데이트
+                        votingResult = votingStatus.getResult();
+                        await updateEmbedMessage(votingResult);
                     } else if (confirmation.customId === 'cancel') {
-                        if (votingStatus.isVotingClosed()) {
-                            await interaction
-                                .editReply({
-                                    content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
-                                    ephemeral: true,
-                                })
-                                .catch(console.error);
-                            return;
-                        }
+                        // 취소한 경우
                         await interaction
                             .editReply({
-                                content: '❌ 변경이 취소되었습니다.',
+                                content: `❌ 상태 변경이 취소되었습니다.`,
                                 components: [],
                                 ephemeral: true,
                             })
                             .catch(console.error);
                     }
-
-                    // 5초 후에 메시지를 삭제합니다
-                    setTimeout(() => {
-                        try {
-                            interaction.deleteReply().catch(console.error);
-                        } catch (err) {
-                            console.error('메시지 삭제 중 에러:', err);
-                        }
-                    }, 5000);
-                } catch (e) {
-                    console.error('시간 초과 또는 에러:', e);
+                } catch (error) {
+                    if (error.code === 'InteractionCollectorError') {
+                        await interaction
+                            .editReply({
+                                content: `⏰ 시간이 초과되었습니다. 다시 시도해주세요.`,
+                                components: [],
+                                ephemeral: true,
+                            })
+                            .catch(console.error);
+                    } else {
+                        console.error('확인 버튼 처리 중 오류 발생:', error);
+                        await interaction
+                            .editReply({
+                                content: `❌ 오류가 발생했습니다. 다시 시도해주세요.`,
+                                components: [],
+                                ephemeral: true,
+                            })
+                            .catch(console.error);
+                    }
+                }
+            } else {
+                // 처음 투표하거나, 투표 상태가 없는 경우
+                if (votingStatus.isVotingClosed()) {
                     await interaction
                         .editReply({
-                            content: '❌ 시간이 초과되었습니다.',
-                            components: [],
+                            content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
+                            ephemeral: true,
                         })
                         .catch(console.error);
-                    // 5초 후에 시간 초과 메시지 삭제
-                    setTimeout(() => {
-                        try {
-                            interaction.deleteReply().catch(console.error);
-                        } catch (err) {
-                            console.error('메시지 삭제 중 에러:', err);
-                        }
-                    }, 5000);
+                    return;
                 }
-                return;
+
+                // 투표 상태 업데이트 (DB 동기화)
+                await votingStatus.setStatus(userId, newStatus);
+
+                await interaction
+                    .editReply({
+                        content: `✅ ${newStatus}로 변경되었습니다.`,
+                        ephemeral: true,
+                    })
+                    .catch(console.error);
+
+                // 결과 업데이트
+                votingResult = votingStatus.getResult();
+                await updateEmbedMessage(votingResult);
             }
 
-            // 처음 투표하거나 같은 상태로 투표하는 경우는 기존 로직 실행
-            if (interaction.customId === 'btnFirstTrue') {
-                await votingStatus.setStatus(userId, '우선참여');
-                await interaction
-                    .editReply({ content: '✅ 우선참여로 기록되었습니다.', ephemeral: true })
-                    .catch(console.error);
-            } else if (interaction.customId === 'btnTrue') {
-                await votingStatus.setStatus(userId, '참여');
-                await interaction
-                    .editReply({ content: '✅ 참여로 기록되었습니다.', ephemeral: true })
-                    .catch(console.error);
-            } else if (interaction.customId === 'btnFalse') {
-                await votingStatus.setStatus(userId, '불참');
-                await interaction
-                    .editReply({ content: '✅ 불참으로 기록되었습니다.', ephemeral: true })
-                    .catch(console.error);
-            }
             setTimeout(() => {
                 try {
                     interaction.deleteReply().catch(console.error);
@@ -284,26 +292,32 @@ module.exports = async interaction => {
             }
 
             if (interaction.customId === 'btnResultParticipated') {
-                // 우선참여와 참여자만 보이기
-                const result = votingStatus.getResult();
+                // 우선참여와 참여자만 보이기 (이미 로드된 데이터 사용)
+                const result = votingResult;
 
                 // 순번과 체크 표시를 분리하여 처리
-                let numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => {
-                    const isInVoice = voiceUser.includes(user);
-                    return `${index + 1}. ${user}${isInVoice ? ' ✅' : ''}`;
-                });
+                let numberedSpecialParticipants = [];
+                if (Array.isArray(result.specialParticipatedUser)) {
+                    numberedSpecialParticipants = result.specialParticipatedUser.map((user, index) => {
+                        const isInVoice = voiceUser.includes(user);
+                        return `${index + 1}. ${user}${isInVoice ? ' ✅' : ''}`;
+                    });
+                }
 
-                let numberedParticipants = result.participatedUser.map((user, index) => {
-                    const isInVoice = voiceUser.includes(user);
-                    return `${index + 1 + numberedSpecialParticipants.length}. ${user}${isInVoice ? ' ✅' : ''}`;
-                });
+                let numberedParticipants = [];
+                if (Array.isArray(result.participatedUser)) {
+                    numberedParticipants = result.participatedUser.map((user, index) => {
+                        const isInVoice = voiceUser.includes(user);
+                        return `${index + 1 + numberedSpecialParticipants.length}. ${user}${isInVoice ? ' ✅' : ''}`;
+                    });
+                }
 
                 const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
                 let myNumber = null; // 나의 투표 순번
 
-                if (myVote === '우선참여') {
+                if (myVote === '우선참여' && Array.isArray(numberedSpecialParticipants)) {
                     myNumber = numberedSpecialParticipants.findIndex(participant => participant.includes(userId)) + 1;
-                } else if (myVote === '참여') {
+                } else if (myVote === '참여' && Array.isArray(numberedParticipants)) {
                     myNumber =
                         numberedSpecialParticipants.length +
                         numberedParticipants.findIndex(participant => participant.includes(userId)) +
@@ -323,10 +337,19 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
 
                 sendPaginatedMessages(interaction, messageContent);
             } else if (interaction.customId === 'btnResultNotParticipated') {
-                // 불참자와 미투표자만 보이기
-                const result = votingStatus.getResult();
-                let sortedNotParticipatedUser = result.notParticipatedUser.sort();
-                let sortedNotVotedUser = result.notVotedUser.sort();
+                // 불참자와 미투표자만 보이기 (이미 로드된 데이터 사용)
+                const result = votingResult;
+
+                // 안전하게 배열 검사 후 정렬
+                let sortedNotParticipatedUser = [];
+                if (Array.isArray(result.notParticipatedUser)) {
+                    sortedNotParticipatedUser = [...result.notParticipatedUser].sort();
+                }
+
+                let sortedNotVotedUser = [];
+                if (Array.isArray(result.notVotedUser)) {
+                    sortedNotVotedUser = [...result.notVotedUser].sort();
+                }
 
                 const myVote = votingStatus.getStatus()[userId] || '미투표'; // 나의 투표 상황
 
@@ -343,8 +366,8 @@ ${userId}님의 투표 상태는 ***${myVote}***  입니다.
             }
         }
 
-        const result = votingStatus.getResult();
-        await updateEmbedMessage(result);
+        // 마지막 임베드 업데이트 (중복 로드 방지)
+        await updateEmbedMessage(votingResult);
     } catch (error) {
         console.error('버튼 이벤트 처리 중 에러:', error);
 
@@ -376,15 +399,66 @@ const updateEmbedMessage = async result => {
         return;
     }
 
-    const embed = votingMessage.embeds[0];
-
-    // 일시와 안내사항만 유지하고, 참여 현황 필드는 제거
-    if (embed.fields.length > 2) {
-        embed.fields.splice(2); // 세 번째 필드부터 제거
-    }
-
     try {
-        await votingMessage.edit({ embeds: [embed] });
+        // 기존 임베드 가져오기
+        const originalEmbed = votingMessage.embeds[0];
+
+        // 원본 임베드의 중요 속성 보존
+        const newEmbed = new EmbedBuilder()
+            .setColor(originalEmbed.color || 0x5865f2)
+            .setTitle(originalEmbed.title || '공성/거점 투표')
+            .setDescription(originalEmbed.description || '')
+            .setTimestamp(originalEmbed.timestamp ? new Date(originalEmbed.timestamp) : null);
+
+        // 필드 복원 - 순서 변경: 일시, 지역, 빈칸, 참여 방법
+        if (originalEmbed.fields && originalEmbed.fields.length > 0) {
+            // 일시 필드
+            if (originalEmbed.fields[0]) {
+                newEmbed.addFields({
+                    name: originalEmbed.fields[0].name,
+                    value: originalEmbed.fields[0].value,
+                    inline: originalEmbed.fields[0].inline,
+                });
+            }
+
+            // 지역 필드
+            if (originalEmbed.fields[1]) {
+                newEmbed.addFields({
+                    name: originalEmbed.fields[1].name,
+                    value: originalEmbed.fields[1].value,
+                    inline: originalEmbed.fields[1].inline,
+                });
+            }
+
+            // 빈 칸 필드 (줄 맞추기 용)
+            if (originalEmbed.fields[2]) {
+                newEmbed.addFields({
+                    name: originalEmbed.fields[2].name,
+                    value: originalEmbed.fields[2].value,
+                    inline: originalEmbed.fields[2].inline,
+                });
+            }
+
+            // 참여 방법 필드
+            if (originalEmbed.fields[3]) {
+                newEmbed.addFields({
+                    name: originalEmbed.fields[3].name,
+                    value: originalEmbed.fields[3].value,
+                    inline: originalEmbed.fields[3].inline,
+                });
+            }
+        }
+
+        // 푸터 복원
+        if (originalEmbed.footer) {
+            newEmbed.setFooter({
+                text: originalEmbed.footer.text || '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
+                iconURL: originalEmbed.footer.iconURL,
+            });
+        }
+
+        // 임베드 업데이트
+        await votingMessage.edit({ embeds: [newEmbed] });
     } catch (err) {
         console.error('투표 메시지 업데이트 중 에러 발생:', err);
     }
@@ -426,31 +500,3 @@ const splitLongMessage = message => {
     if (currentMessage) messages.push(currentMessage);
     return messages;
 };
-// const { Events } = require('discord.js');
-
-// module.exports = {
-//     name: Events.InteractionCreate,
-//     async execute(interaction) {
-//         // 버튼 클릭 이벤트 처리
-//         if (interaction.isButton()) {
-//             if (interaction.customId === 'vote_button') {
-//                 try {
-//                     const userId = interaction.user.id;
-//                     const nickname = interaction.member.nickname || interaction.user.username;
-
-//                     // 사용자에게만 보이는 응답 전송
-//                     await interaction.reply({
-//                         content: `${nickname}님, 투표 페이지로 이동하세요: http://localhost:3000/vote?user=${userId}`,
-//                         ephemeral: true, // 다른 사용자에게는 보이지 않음
-//                     });
-//                 } catch (error) {
-//                     console.error('버튼 클릭 처리 중 오류 발생:', error);
-//                     await interaction.reply({
-//                         content: '투표 처리 중 오류가 발생했습니다. 나중에 다시 시도해주세요.',
-//                         ephemeral: true,
-//                     });
-//                 }
-//             }
-//         }
-//     },
-// };

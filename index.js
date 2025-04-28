@@ -1,11 +1,13 @@
 require('dotenv/config');
 const votingStatus = require('./votingStatus');
 // const mongoose = require('mongoose'); // Mongoose 대신 Prisma 사용
-const { Client, IntentsBitField, GatewayIntentBits } = require('discord.js');
+const { Client, IntentsBitField, GatewayIntentBits, Events } = require('discord.js');
 const { CommandHandler } = require('djs-commander');
 const path = require('path');
 const moment = require('moment-timezone');
 const { PrismaClient } = require('./generated/prisma'); // Prisma 클라이언트 가져오기
+const guildMemberUpdateHandler = require('./events/guildMemberUpdate/guildMemberUpdate');
+const guildMemberAddHandler = require('./events/guildMemberAdd/guildMemberAdd');
 
 // Prisma 클라이언트 초기화
 const prisma = new PrismaClient();
@@ -20,6 +22,48 @@ const client = new Client({
         GatewayIntentBits.GuildVoiceStates,
     ],
 });
+
+// 음성 채널에 참여한 사용자 목록
+const voiceUser = [];
+
+// 봇의 ready 이벤트가 이미 처리되었는지 추적
+let isReadyEventHandled = false;
+
+// 서버 재시작 시 현재 음성 채널에 있는 유저들의 정보를 가져오는 함수
+async function initVoiceUsers() {
+    try {
+        // 서버 ID 가져오기
+        const serverId =
+            process.env.NODE_ENV === 'development' ? process.env.TEST_SERVER_ID : process.env.PRODUCTION_SERVER_ID;
+
+        // 서버 정보 가져오기
+        const guild = await client.guilds.fetch(serverId);
+        if (!guild) {
+            console.error('서버를 찾을 수 없습니다.');
+            return;
+        }
+
+        // 음성 채널 상태 확인
+        const voiceChannels = guild.channels.cache.filter(channel => channel.type === 2 /* 음성 채널 타입 */);
+
+        // voiceUser 배열 초기화
+        voiceUser.length = 0;
+
+        // 각 음성 채널에 있는 사용자 정보 수집
+        voiceChannels.forEach(channel => {
+            channel.members.forEach(member => {
+                if (!voiceUser.includes(member.displayName)) {
+                    voiceUser.push(member.displayName);
+                    console.log(`음성 채널 초기화: ${member.displayName}님이 ${channel.name} 채널에 접속 중입니다.`);
+                }
+            });
+        });
+
+        console.log(`음성 채널 초기화 완료: 총 ${voiceUser.length}명의 사용자가 음성 채널에 접속 중입니다.`);
+    } catch (error) {
+        console.error('음성 채널 사용자 초기화 중 오류 발생:', error);
+    }
+}
 
 async function connectDB() {
     try {
@@ -68,13 +112,34 @@ new CommandHandler({
 
 connectDB();
 
+// 봇이 준비되면 음성 채널 사용자 초기화
+client.once('ready', async () => {
+    // 중복 실행 방지
+    if (isReadyEventHandled) {
+        console.log('Ready 이벤트가 이미 처리되었습니다. 중복 실행 방지');
+        return;
+    }
+
+    isReadyEventHandled = true;
+    console.log(`${client.user.tag} is online. - ${moment().tz('Asia/seoul').format('YYYY-MM-DD HH:mm:ss')}`);
+
+    // 음성 채널 사용자 초기화
+    await initVoiceUsers();
+
+    // 투표 상태 복원
+    try {
+        await votingStatus.restoreVotingStatus(client);
+        console.log('투표 상태 복원 완료');
+    } catch (error) {
+        console.error('투표 상태 복원 중 오류 발생:', error);
+    }
+});
+
 client.on('messageCreate', msg => {
     const moment = require('moment-timezone');
     const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
     console.log(`${msg.author.username} : ${msg.content} - ${krTime}`);
 });
-
-const voiceUser = [];
 
 client.on('voiceStateUpdate', (oldState, newState) => {
     const user = newState.member.displayName;
@@ -108,6 +173,12 @@ client.on('voiceStateUpdate', (oldState, newState) => {
         );
     }
 });
+
+// 닉네임 변경 이벤트 감지
+client.on(Events.GuildMemberUpdate, guildMemberUpdateHandler);
+
+// 새 멤버 입장 감지
+client.on(Events.GuildMemberAdd, guildMemberAddHandler);
 
 // 애플리케이션 종료 시 Prisma 클라이언트 연결 종료
 process.on('beforeExit', async () => {

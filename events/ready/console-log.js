@@ -3,9 +3,12 @@ const { default: mongoose } = require('mongoose');
 const moment = require('moment-timezone');
 const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
 const cron = require('node-cron');
+
 module.exports = async client => {
     console.log(`${client.user.username} is online. - ${krTime}`);
-    await restoreVotingStatus(client);
+
+    // 투표 상태 복원은 index.js에서 처리합니다. 중복 실행 방지.
+    // await restoreVotingStatus(client);
 
     if (process.env.NODE_ENV === 'development') {
         // 매 정각의 5초마다 실행되도록 설정 (초 분 시 일 월 요일)

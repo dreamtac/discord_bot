@@ -30,11 +30,14 @@ model Vote {
   title       String
   description String
   date        String
+  region      String
   isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   // 투표와 유저 투표 상태 간의 관계
   voteStatus  VoteStatus[]
+  // 투표 메시지와의 관계
+  voteMessage VoteMessage?
 }
 
 model VoteStatus {
@@ -52,4 +55,15 @@ model VoteStatus {
 
   // 유저당 하나의 투표에 하나의 상태만 가질 수 있도록 복합 인덱스 설정
   @@unique([userId, voteId])
+}
+
+model VoteMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  messageId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 관계 설정 - 각 투표에 하나의 메시지만 연결
+  voteId String @unique @db.ObjectId
+  vote   Vote   @relation(fields: [voteId], references: [id])
 }
