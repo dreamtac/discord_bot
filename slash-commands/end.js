@@ -1,9 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const votingStatus = require('../votingStatus');
-const { PrismaClient } = require('../generated/prisma'); // Prisma 클라이언트 가져오기
-
-// Prisma 클라이언트 초기화
-const prisma = new PrismaClient();
+const prisma = require('../utils/prisma'); // Prisma 싱글톤 인스턴스 가져오기
 
 module.exports = {
     run: async ({ interaction }) => {

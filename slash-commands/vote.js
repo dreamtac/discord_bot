@@ -10,7 +10,8 @@ const {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
 } = require('discord.js');
-const { PrismaClient } = require('../generated/prisma'); // Prisma 클라이언트 가져오기
+// PrismaClient 직접 임포트 및 인스턴스 생성 제거
+// const { PrismaClient } = require('../generated/prisma'); // Prisma 클라이언트 가져오기
 const {
     CREATE_VOTE_PERMISSIONS,
     CREATE_VOTE_PERMISSIONS_DEV,
@@ -18,8 +19,10 @@ const {
     VOTE_PERMISSIONS,
 } = require('../utils/constants');
 const { validateDate } = require('../utils/dateValidator'); // 날짜 검증 유틸리티 추가
-// Prisma 클라이언트 초기화
-const prisma = new PrismaClient();
+// Prisma 클라이언트 초기화 제거
+// const prisma = new PrismaClient();
+// 대신 싱글톤 인스턴스 사용
+const prisma = require('../utils/prisma');
 const isDevMode = process.env.NODE_ENV === 'development';
 
 // votingStatus 모듈은 계속 사용 (현재 코드와의 호환성 유지를 위해)
@@ -509,7 +512,7 @@ module.exports = {
                         .setTitle(`📢 공성/거점 투표`)
                         .addFields(
                             { name: '📅 일시', value: `\`${formattedDate}\``, inline: true },
-                            { name: '🌐 지역', value: `\`${selectedRegion}\``, inline: true },
+                            { name: '🗺️ 지역', value: `\`${selectedRegion}\``, inline: true },
                             { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
                             {
                                 name: '📌 주의사항',

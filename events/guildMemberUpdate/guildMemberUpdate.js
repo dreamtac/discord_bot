@@ -1,5 +1,4 @@
-const { PrismaClient } = require('../../generated/prisma');
-const prisma = new PrismaClient();
+const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 
 // 중복 이벤트 방지를 위한 캐시

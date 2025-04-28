@@ -3,10 +3,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 // const MemberDB = require('./models/memberDB');
 // const VotingState = require('./models/votingStateDB');
 const moment = require('moment-timezone');
-const { PrismaClient } = require('./generated/prisma');
-
-// Prisma 클라이언트 초기화
-const prisma = new PrismaClient();
+const prisma = require('./utils/prisma');
 
 // 메모리 캐시 (성능 최적화용)
 let votingStatus = {}; // 각 유저별 투표 상태를 저장할 객체
@@ -447,11 +444,11 @@ async function restoreVotingMessage(client, activeVote) {
         // 새 메시지 생성을 위한 임베드 및 버튼 설정 - /투표 명령어와 동일한 디자인 사용
         const embed = new EmbedBuilder()
             .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
-            .setTitle(`📢 ${activeVote.region} 공성/거점 투표`)
+            .setTitle(`📢 공성/거점 투표`)
             .setDescription(`${activeVote.description || '서버 재시작으로 복원된 투표입니다.'}`)
             .addFields(
                 { name: '📅 일시', value: `\`${activeVote.date || '정보 없음'}\``, inline: true },
-                { name: '🌐 지역', value: `\`${activeVote.region || '정보 없음'}\``, inline: true },
+                { name: '🗺️️ 지역', value: `\`${activeVote.region || '정보 없음'}\``, inline: true },
                 { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
                 {
                     name: '📌 주의사항',

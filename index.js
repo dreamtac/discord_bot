@@ -5,12 +5,9 @@ const { Client, IntentsBitField, GatewayIntentBits, Events } = require('discord.
 const { CommandHandler } = require('djs-commander');
 const path = require('path');
 const moment = require('moment-timezone');
-const { PrismaClient } = require('./generated/prisma'); // Prisma 클라이언트 가져오기
+const prisma = require('./utils/prisma'); // Prisma 싱글톤 인스턴스 가져오기
 const guildMemberUpdateHandler = require('./events/guildMemberUpdate/guildMemberUpdate');
 const guildMemberAddHandler = require('./events/guildMemberAdd/guildMemberAdd');
-
-// Prisma 클라이언트 초기화
-const prisma = new PrismaClient();
 
 const client = new Client({
     intents: [

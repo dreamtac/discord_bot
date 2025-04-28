@@ -1,5 +1,4 @@
-const { PrismaClient } = require('../../generated/prisma');
-const prisma = new PrismaClient();
+const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 const { VOTE_PERMISSIONS } = require('../../utils/constants');
 

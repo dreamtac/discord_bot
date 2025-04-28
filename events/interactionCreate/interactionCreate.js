@@ -2,10 +2,7 @@ const { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('
 const votingStatus = require('../../votingStatus');
 const { voiceUser } = require('../..');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('../../generated/prisma');
-
-// Prisma 클라이언트 초기화
-const prisma = new PrismaClient();
+const prisma = require('../../utils/prisma');
 
 module.exports = async interaction => {
     if (!interaction.isButton()) return;
@@ -63,8 +60,8 @@ module.exports = async interaction => {
 
         const userId = interaction.member.displayName;
 
-        // 운영진인지 확인하는 함수
-        const isAdmin = interaction.member.roles.cache.some(
+        // 투표 현황 보기 권한 체크
+        const canViewResult = interaction.member.roles.cache.some(
             role => role.name === 'GANG' || role.name === '돚거단' || role.name === '포도당' || role.name === '접어'
         );
 
@@ -85,7 +82,7 @@ module.exports = async interaction => {
             interaction.customId === 'btnTrue' ||
             interaction.customId === 'btnFalse'
         ) {
-            // 역할이 용병인지 체크
+            // 투표 권한 체크
             if (process.env.NODE_ENV !== 'development') {
                 if (
                     interaction.member.roles.cache.some(role => role.name === '용병') ||
@@ -277,7 +274,7 @@ module.exports = async interaction => {
         ) {
             // 운영진 권한 확인
             if (process.env.NODE_ENV !== 'development') {
-                if (!isAdmin) {
+                if (!canViewResult) {
                     await interaction
                         .editReply({
                             content: `❌ 권한이 없습니다. 투표 현황은 관계자만 볼 수 있습니다.`,
