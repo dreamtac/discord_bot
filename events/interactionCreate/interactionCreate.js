@@ -179,6 +179,9 @@ module.exports = async interaction => {
 
                     // 버튼 응답에 따라 처리합니다
                     if (confirmation.customId === `confirm_${newStatus}`) {
+                        // 확인 버튼을 누른 시점의 시간 기록 (투표 순서 결정에 사용)
+                        const clickTimestamp = Date.now();
+
                         // 한번 더 투표 종료 여부 확인 (상태만 체크, DB 로드 안함)
                         if (votingStatus.isVotingClosed()) {
                             await interaction
@@ -190,12 +193,44 @@ module.exports = async interaction => {
                             return;
                         }
 
-                        // 투표 상태 업데이트 (DB 동기화)
-                        await votingStatus.setStatus(userId, newStatus);
+                        // 투표 상태 업데이트 (DB 동기화) - 클릭 시간 함께 전달
+                        const updateResult = await votingStatus.setStatus(userId, newStatus, clickTimestamp);
+
+                        if (updateResult === 'already') {
+                            await interaction
+                                .editReply({
+                                    content: `✅ 이미 ${newStatus} 상태입니다.`,
+                                    ephemeral: true,
+                                })
+                                .catch(console.error);
+                            return;
+                        }
+                        if (updateResult === 'locked') {
+                            await interaction
+                                .editReply({
+                                    content: `⏳ 처리 중입니다. 잠시 후 다시 시도해주세요.`,
+                                    ephemeral: true,
+                                })
+                                .catch(console.error);
+                            return;
+                        }
+                        if (updateResult === false) {
+                            await interaction
+                                .editReply({
+                                    content: `❌ 오류가 발생했습니다. 다시 시도해주세요.`,
+                                    ephemeral: true,
+                                })
+                                .catch(console.error);
+                            return;
+                        }
+
+                        // 예약된 순번 정보 가져오기
+                        const pendingNumbers = votingStatus.getPendingNumbers();
+                        const myNumber = pendingNumbers[userId];
 
                         await interaction
                             .editReply({
-                                content: `✅ ${newStatus}로 변경되었습니다.`,
+                                content: `✅ ${newStatus}로 변경되었습니다.}`,
                                 components: [],
                                 ephemeral: true,
                             })
@@ -246,12 +281,47 @@ module.exports = async interaction => {
                     return;
                 }
 
-                // 투표 상태 업데이트 (DB 동기화)
-                await votingStatus.setStatus(userId, newStatus);
+                // 현재 시간 기록 (투표 순서 결정에 사용)
+                const clickTimestamp = Date.now();
+
+                // 투표 상태 업데이트 (DB 동기화) - 클릭 시간 함께 전달
+                const updateResult = await votingStatus.setStatus(userId, newStatus, clickTimestamp);
+
+                if (updateResult === 'already') {
+                    await interaction
+                        .editReply({
+                            content: `✅ 이미 ${newStatus} 상태입니다.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                    return;
+                }
+                if (updateResult === 'locked') {
+                    await interaction
+                        .editReply({
+                            content: `⏳ 처리 중입니다. 잠시 후 다시 시도해주세요.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                    return;
+                }
+                if (updateResult === false) {
+                    await interaction
+                        .editReply({
+                            content: `❌ 오류가 발생했습니다. 다시 시도해주세요.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                    return;
+                }
+
+                // 예약된 순번 정보 가져오기
+                const pendingNumbers = votingStatus.getPendingNumbers();
+                const myNumber = pendingNumbers[userId];
 
                 await interaction
                     .editReply({
-                        content: `✅ ${newStatus}로 변경되었습니다.`,
+                        content: `✅ ${newStatus}로 변경되었습니다.}`,
                         ephemeral: true,
                     })
                     .catch(console.error);

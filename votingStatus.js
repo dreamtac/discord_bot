@@ -11,6 +11,13 @@ let order = []; // 투표 순서 기록용 배열
 let votingClosed = true; // 투표 종료 상태를 관리하는 변수
 let activeVoteId = null; // 현재 활성화된 투표 ID
 let votingMessage = null; // 현재 투표 메시지
+let userLocks = {}; // 사용자별 락 메커니즘 - 중복 요청 방지용
+let pendingNumbers = {}; // 유저별 순번 예약 정보
+let nextNumber = 1; // 다음 순번
+
+// 클릭 시간 순으로 순번을 부여하기 위한 큐
+let requestTimestamps = [];
+let requestUsers = [];
 
 // 투표 상태를 DB에서 메모리로 로드하는 함수
 async function loadVotingStatusFromDB() {
@@ -57,13 +64,22 @@ async function loadVotingStatusFromDB() {
                     order.push(null);
                 }
                 order[status.number - 1] = userDisplayName;
+
+                // 다음 번호 업데이트
+                if (status.number >= nextNumber) {
+                    nextNumber = status.number + 1;
+                }
             }
         });
 
         // 배열에서 null 값 제거 (압축)
         order = order.filter(item => item !== null);
 
-        console.log(`투표 상태가 DB에서 로드되었습니다. 총 ${Object.keys(votingStatus).length}명의 상태가 로드됨.`);
+        console.log(
+            `투표 상태가 DB에서 로드되었습니다. 총 ${
+                Object.keys(votingStatus).length
+            }명의 상태가 로드됨. 다음 순번: ${nextNumber}`
+        );
         return true;
     } catch (err) {
         console.error('DB에서 투표 상태 로드 중 오류 발생:', err);
@@ -117,18 +133,55 @@ module.exports = {
         console.log(`투표 상태가 ${status ? '활성화' : '비활성화'}되었습니다.`);
     },
 
+    // 클릭 시간 기준으로 순번 예약
+    reserveNumber: (userId, timestamp) => {
+        if (!userId) return null;
+
+        // 이미 예약된 순번이 있으면 해당 순번 반환
+        if (pendingNumbers[userId]) {
+            return pendingNumbers[userId];
+        }
+
+        // 클릭 시간과 유저 정보 기록
+        requestTimestamps.push(timestamp);
+        requestUsers.push(userId);
+
+        // 타임스탬프 기준으로 정렬된 인덱스 찾기
+        const sortedTimestamps = [...requestTimestamps].sort((a, b) => a - b);
+        const index = sortedTimestamps.indexOf(timestamp);
+
+        // 순번 예약 (이미 참여했던 사용자가 다른 상태로 변경 시 예외 처리)
+        const existingIndex = order.indexOf(userId);
+        if (existingIndex === -1) {
+            // 새로운 참여자
+            const number = nextNumber++;
+            pendingNumbers[userId] = number;
+            return number;
+        } else {
+            // 기존 참여자 (순번 유지)
+            const number = existingIndex + 1;
+            pendingNumbers[userId] = number;
+            return number;
+        }
+    },
+
     // 사용자의 투표 상태 설정 (DB 동기화 포함)
-    setStatus: async (userId, status) => {
+    setStatus: async (userId, status, requestTimestamp) => {
         // userId가 유효한지 확인
         if (!userId) {
             console.error('유효하지 않은 userId:', userId);
-            return;
+            return false;
+        }
+
+        // 이미 처리 중인 요청이 있는지 확인 (락 체크)
+        if (userLocks[userId]) {
+            return 'locked';
         }
 
         // 투표가 종료되었는지 확인
         if (votingClosed) {
             console.log('투표가 종료되어 상태를 변경할 수 없습니다.');
-            return;
+            return false;
         }
 
         // 활성화된 투표가 없으면 상태 로드 시도
@@ -136,80 +189,114 @@ module.exports = {
             await loadVotingStatusFromDB();
             if (!activeVoteId) {
                 console.error('활성화된 투표가 없어 상태를 변경할 수 없습니다.');
-                return;
+                return false;
             }
         }
 
-        // 큐에 작업 추가 (비동기 작업 관리)
-        await new Promise(resolve => {
-            queue.push(async () => {
-                try {
-                    // 메모리 상태 업데이트
-                    votingStatus[userId] = status;
-                    const existingIndex = order.indexOf(userId);
+        // 현재 상태와 같은지 빠르게 체크 (락 설정 전에 확인)
+        const currentStatus = votingStatus[userId];
+        if (currentStatus === status) {
+            return 'already';
+        }
 
-                    let number = null;
+        // 클릭 시간 기준으로 순번 예약 (참여 또는 우선참여인 경우만)
+        let number = null;
+        if (status === '우선참여' || status === '참여') {
+            if (!requestTimestamp) {
+                requestTimestamp = Date.now();
+            }
+            number = module.exports.reserveNumber(userId, requestTimestamp);
+            console.log(`${userId}님의 순번이 ${number}번으로 예약되었습니다. (타임스탬프: ${requestTimestamp})`);
+        }
 
-                    // 참여 상태일 경우 순서 업데이트
-                    if (status === '우선참여' || status === '참여') {
-                        if (existingIndex === -1) {
-                            order.push(userId);
-                            number = order.length;
-                        } else {
-                            order.splice(existingIndex, 1); // 기존 위치에서 제거
-                            order.push(userId); // 배열 끝에 추가
-                            number = order.length;
-                        }
-                    } else if (status === '불참' || status === '미투표') {
-                        // 불참 또는 미투표인 경우 배열에서 제거
-                        if (existingIndex !== -1) {
-                            order.splice(existingIndex, 1);
-                        }
-                    }
+        // 락 설정 (중복 요청 방지)
+        userLocks[userId] = true;
 
-                    // DB 상태 업데이트
+        try {
+            // 큐에 작업 추가 (비동기 작업 관리)
+            await new Promise(resolve => {
+                queue.push(async () => {
                     try {
-                        // 1. 사용자 검색
-                        const user = await prisma.user.findFirst({
-                            where: { displayName: userId },
-                        });
+                        // 메모리 상태 업데이트
+                        votingStatus[userId] = status;
+                        const existingIndex = order.indexOf(userId);
 
-                        if (!user) {
-                            console.error(`사용자를 찾을 수 없음: ${userId}`);
-                            return;
+                        // 참여 상태일 경우 순서 업데이트 (예약된 순번 사용)
+                        if (status === '우선참여' || status === '참여') {
+                            if (existingIndex === -1) {
+                                order.push(userId);
+                            } else {
+                                order.splice(existingIndex, 1); // 기존 위치에서 제거
+                                order.push(userId); // 배열 끝에 추가
+                            }
+                        } else if (status === '불참' || status === '미투표') {
+                            // 불참 또는 미투표인 경우 배열에서 제거
+                            if (existingIndex !== -1) {
+                                order.splice(existingIndex, 1);
+                            }
+                            // 순번 예약 정보도 제거
+                            delete pendingNumbers[userId];
                         }
 
-                        // 2. 투표 상태 업데이트
-                        await prisma.voteStatus.updateMany({
-                            where: {
-                                userId: user.id,
-                                voteId: activeVoteId,
-                            },
-                            data: {
-                                status,
-                                number,
-                                date: new Date(),
-                            },
-                        });
+                        // DB 상태 업데이트
+                        try {
+                            // 1. 사용자 검색
+                            const user = await prisma.user.findFirst({
+                                where: { displayName: userId },
+                            });
 
-                        console.log(
-                            `${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: ${number || '없음'})`
-                        );
-                    } catch (dbErr) {
-                        console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
+                            if (!user) {
+                                console.error(`사용자를 찾을 수 없음: ${userId}`);
+                                resolve(false);
+                                return;
+                            }
+
+                            // 2. 투표 상태 업데이트
+                            await prisma.voteStatus.updateMany({
+                                where: {
+                                    userId: user.id,
+                                    voteId: activeVoteId,
+                                },
+                                data: {
+                                    status,
+                                    number,
+                                    date: new Date(),
+                                },
+                            });
+
+                            console.log(
+                                `${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: ${
+                                    number || '없음'
+                                })`
+                            );
+                            resolve(true);
+                        } catch (dbErr) {
+                            console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
+                            resolve(false);
+                        }
+                    } catch (err) {
+                        console.error('Error processing task:', err);
+                        resolve(false);
+                    } finally {
+                        delete userLocks[userId];
+                        if (status !== '우선참여' && status !== '참여') {
+                            delete pendingNumbers[userId];
+                        }
                     }
-                } catch (err) {
-                    console.error('Error processing task:', err);
-                } finally {
-                    resolve();
+                });
+
+                if (!queueRunning) {
+                    queueRunning = true;
+                    runQueue();
                 }
             });
 
-            if (!queueRunning) {
-                queueRunning = true;
-                runQueue();
-            }
-        });
+            return true; // 성공적으로 처리됨
+        } catch (error) {
+            console.error('투표 상태 변경 중 오류 발생:', error);
+            delete userLocks[userId];
+            return false;
+        }
     },
 
     // 투표 초기화 및 시작
@@ -220,6 +307,11 @@ module.exports = {
         queue = []; // 비동기 작업 큐 초기화
         queueRunning = false; // 큐 작업 상태 초기화
         votingClosed = true; // 투표 종료 상태로 초기화
+        userLocks = {}; // 사용자별 락 초기화
+        pendingNumbers = {}; // 순번 예약 정보 초기화
+        nextNumber = 1; // 다음 순번 초기화
+        requestTimestamps = []; // 타임스탬프 초기화
+        requestUsers = []; // 요청 유저 초기화
         //************초기화 코드************//
 
         // 메모리 상태를 DB와 동기화
@@ -242,6 +334,8 @@ module.exports = {
             // 메모리 상태 초기화
             activeVoteId = null;
             votingClosed = true;
+            pendingNumbers = {}; // 순번 예약 정보 초기화
+            nextNumber = 1; // 다음 순번 초기화
 
             const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
             console.log(`투표 종료됨! - ${krTime}`);
@@ -386,6 +480,21 @@ module.exports = {
     // 내부 순서 배열 접근 (닉네임 변경 처리용)
     _getOrder: () => {
         return order;
+    },
+
+    // 사용자 락 상태 확인 (테스트용)
+    isUserLocked: userId => {
+        return !!userLocks[userId];
+    },
+
+    // 현재 처리 중인 사용자 목록 반환 (디버깅용)
+    getLockedUsers: () => {
+        return Object.keys(userLocks);
+    },
+
+    // 예약된 순번 확인 (디버깅용)
+    getPendingNumbers: () => {
+        return { ...pendingNumbers };
     },
 };
 

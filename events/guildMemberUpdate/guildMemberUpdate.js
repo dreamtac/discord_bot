@@ -1,3 +1,4 @@
+const { VOTE_PERMISSIONS } = require('../../utils/constants');
 const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 
@@ -53,8 +54,20 @@ module.exports = async (oldMember, newMember) => {
             const oldRoles = oldMember.roles.cache.map(role => role.name).join(', ');
             const newRoles = newMember.roles.cache.map(role => role.name).join(', ');
             console.log(`역할 변경 감지: [${oldRoles}] → [${newRoles}]`);
+            if (VOTE_PERMISSIONS.some(permission => newRoles.includes(permission))) {
+                console.log(`투표 권한 부여: ${newMember.displayName}`);
+                try {
+                    prisma.votingStatus.create({
+                        data: {
+                            userId: newMember.id,
+                            status: '미투표',
+                        },
+                    });
+                } catch (error) {
+                    console.error('투표 권한 부여 중 오류 발생:', error);
+                }
+            }
         }
-
         // 1. DB에서 사용자 찾기 (discordId로 검색)
         const user = await prisma.user.findFirst({
             where: { discordId: newMember.id },
