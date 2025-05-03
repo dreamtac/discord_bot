@@ -103,8 +103,8 @@ module.exports = {
         try {
             const modalInteraction = await interaction.awaitModalSubmit({ filter, time: 600000 });
 
-            // 모달 응답 시 로딩 메시지 표시 - 항상 ephemeral로 설정하여 개인적으로 표시
-            await modalInteraction.deferReply({ ephemeral: true });
+            // 모달 응답 시 로딩 메시지 표시
+            await modalInteraction.deferReply({ ephemeral: isDevMode });
 
             const date = modalInteraction.fields.getTextInputValue('inputDate');
             const additionalDescription = modalInteraction.fields.getTextInputValue('inputDescription');
@@ -115,7 +115,7 @@ module.exports = {
             if (!dateValidation.isValid) {
                 await modalInteraction.editReply({
                     content: `⚠️ ${dateValidation.errorMessage}`,
-                    ephemeral: true, // 항상 개최자에게만 보이도록 true로 설정
+                    ephemeral: true,
                 });
                 return;
             }
@@ -153,7 +153,7 @@ module.exports = {
             await modalInteraction.editReply({
                 embeds: [infoEmbed],
                 components: [selectRow],
-                ephemeral: true,
+                ephemeral: isDevMode,
             });
 
             // 지역 선택 메뉴 응답 대기
@@ -536,12 +536,11 @@ module.exports = {
 
                         console.log('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
                     } else {
-                        // 프로덕션 모드: 공개 메시지로 전환
-                        // 기존 임시 메시지를 삭제하고 새 메시지를 채널에 전송
-                        await modalInteraction.deleteReply();
-                        message = await interaction.channel.send({
+                        // 프로덕션 모드: 모든 사람에게 표시
+                        message = await modalInteraction.editReply({
                             embeds: [embed],
                             components: [buttons],
+                            fetchReply: true,
                         });
 
                         console.log('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
