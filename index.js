@@ -183,4 +183,8 @@ process.on('beforeExit', async () => {
     console.log('Disconnected from Prisma');
 });
 
-module.exports = { voiceUser, client, prisma }; // prisma 클라이언트도 내보내기
+function getVoiceUser() {
+    return voiceUser;
+}
+
+module.exports = { getVoiceUser, client, prisma };

@@ -1,6 +1,6 @@
 const { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const votingStatus = require('../../votingStatus');
-const { voiceUser } = require('../..');
+const { getVoiceUser } = require('../../index');
 const jwt = require('jsonwebtoken');
 const prisma = require('../../utils/prisma');
 
@@ -289,6 +289,7 @@ module.exports = async interaction => {
             }
 
             if (interaction.customId === 'btnResultParticipated') {
+                const voiceUser = getVoiceUser();
                 // 우선참여와 참여자만 보이기 (이미 로드된 데이터 사용)
                 const result = votingResult;
 

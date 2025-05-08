@@ -146,25 +146,19 @@ module.exports = {
                 try {
                     // 메모리 상태 업데이트
                     votingStatus[userId] = status;
-                    const existingIndex = order.indexOf(userId);
+
+                    // order 배열에서 해당 userId 모두 제거
+                    order = order.filter(uid => uid !== userId);
 
                     let number = null;
 
                     // 참여 상태일 경우 순서 업데이트
                     if (status === '우선참여' || status === '참여') {
-                        if (existingIndex === -1) {
-                            order.push(userId);
-                            number = order.length;
-                        } else {
-                            order.splice(existingIndex, 1); // 기존 위치에서 제거
-                            order.push(userId); // 배열 끝에 추가
-                            number = order.length;
-                        }
+                        order.push(userId);
+                        number = order.indexOf(userId) + 1; // 항상 유일한 순번
                     } else if (status === '불참' || status === '미투표') {
-                        // 불참 또는 미투표인 경우 배열에서 제거
-                        if (existingIndex !== -1) {
-                            order.splice(existingIndex, 1);
-                        }
+                        // 불참 또는 미투표인 경우 배열에서 제거만 하면 됨
+                        number = null;
                     }
 
                     // DB 상태 업데이트
@@ -179,7 +173,7 @@ module.exports = {
                             return;
                         }
 
-                        // 2. 투표 상태 업데이트
+                        // 2. 투표 상태 업데이트 (해당 유저만 number 갱신)
                         await prisma.voteStatus.updateMany({
                             where: {
                                 userId: user.id,

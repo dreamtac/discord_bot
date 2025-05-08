@@ -3,7 +3,7 @@ const { default: mongoose } = require('mongoose');
 const moment = require('moment-timezone');
 const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
 const cron = require('node-cron');
-
+const { voiceUser } = require('../../index');
 module.exports = async client => {
     console.log(`${client.user.username} is online. - ${krTime}`);
 
