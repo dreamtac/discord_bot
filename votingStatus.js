@@ -12,6 +12,11 @@ let votingClosed = true; // 투표 종료 상태를 관리하는 변수
 let activeVoteId = null; // 현재 활성화된 투표 ID
 let votingMessage = null; // 현재 투표 메시지
 
+//투표 종료후 투표 데이터 저장
+let lastVotingStatus = null;
+let lastOrder = null;
+let lastVoteId = null;
+
 // 투표 상태를 DB에서 메모리로 로드하는 함수
 async function loadVotingStatusFromDB() {
     try {
@@ -155,42 +160,100 @@ module.exports = {
                     // 참여 상태일 경우 순서 업데이트
                     if (status === '우선참여' || status === '참여') {
                         order.push(userId);
-                        number = order.indexOf(userId) + 1; // 항상 유일한 순번
+                        // 여기서 number를 단순히 배열 인덱스 + 1로 할당하지 않고
+                        // DB에서 현재 사용 중인 최대 번호를 가져와 중복을 방지
+                        try {
+                            // 1. 사용자 검색
+                            const user = await prisma.user.findFirst({
+                                where: { displayName: userId },
+                            });
+
+                            if (!user) {
+                                console.error(`사용자를 찾을 수 없음: ${userId}`);
+                                resolve();
+                                return;
+                            }
+
+                            // 2. 현재 투표의 최대 number 값 가져오기
+                            const maxNumberResult = await prisma.voteStatus.findMany({
+                                where: {
+                                    voteId: activeVoteId,
+                                    number: { not: null },
+                                },
+                                orderBy: {
+                                    number: 'desc',
+                                },
+                                take: 1,
+                            });
+
+                            // 3. 최대값 + 1로 새 번호 할당
+                            const maxNumber = maxNumberResult.length > 0 ? maxNumberResult[0].number : 0;
+                            number = maxNumber + 1;
+
+                            // 4. 배열 내의 위치도 조정 (필요하면 빈칸을 채워 number와 일치시킴)
+                            while (order.length < number) {
+                                order.push(null);
+                            }
+                            // 마지막 위치에 userId 설정
+                            order[number - 1] = userId;
+
+                            // 5. null 제거 (압축)
+                            order = order.filter(item => item !== null);
+
+                            // 6. 투표 상태 업데이트
+                            await prisma.voteStatus.updateMany({
+                                where: {
+                                    userId: user.id,
+                                    voteId: activeVoteId,
+                                },
+                                data: {
+                                    status,
+                                    number,
+                                    date: new Date(),
+                                },
+                            });
+
+                            console.log(
+                                `${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: ${
+                                    number || '없음'
+                                })`
+                            );
+                        } catch (dbErr) {
+                            console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
+                        }
                     } else if (status === '불참' || status === '미투표') {
                         // 불참 또는 미투표인 경우 배열에서 제거만 하면 됨
                         number = null;
-                    }
 
-                    // DB 상태 업데이트
-                    try {
-                        // 1. 사용자 검색
-                        const user = await prisma.user.findFirst({
-                            where: { displayName: userId },
-                        });
+                        try {
+                            // 사용자 검색
+                            const user = await prisma.user.findFirst({
+                                where: { displayName: userId },
+                            });
 
-                        if (!user) {
-                            console.error(`사용자를 찾을 수 없음: ${userId}`);
-                            return;
+                            if (!user) {
+                                console.error(`사용자를 찾을 수 없음: ${userId}`);
+                                resolve();
+                                return;
+                            }
+
+                            // 투표 상태 업데이트
+                            await prisma.voteStatus.updateMany({
+                                where: {
+                                    userId: user.id,
+                                    voteId: activeVoteId,
+                                },
+                                data: {
+                                    status,
+                                    number: null,
+                                    date: new Date(),
+                                },
+                            });
+
+                            console.log(`${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: 없음)`);
+                        } catch (dbErr) {
+                            console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
                         }
-
-                        // 2. 투표 상태 업데이트 (해당 유저만 number 갱신)
-                        await prisma.voteStatus.updateMany({
-                            where: {
-                                userId: user.id,
-                                voteId: activeVoteId,
-                            },
-                            data: {
-                                status,
-                                number,
-                                date: new Date(),
-                            },
-                        });
-
-                        console.log(
-                            `${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: ${number || '없음'})`
-                        );
-                    } catch (dbErr) {
-                        console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
                     }
                 } catch (err) {
                     console.error('Error processing task:', err);
@@ -232,6 +295,10 @@ module.exports = {
                 where: { isActive: true },
                 data: { isActive: false },
             });
+
+            lastVotingStatus = { ...votingStatus };
+            lastOrder = { ...order };
+            lastVoteId = activeVoteId;
 
             // 메모리 상태 초기화
             activeVoteId = null;
@@ -281,6 +348,11 @@ module.exports = {
         }
 
         // 현재 메모리에 있는 상태로 결과 계산
+        if (votingClosed) {
+            votingStatus = lastVotingStatus;
+            order = lastOrder;
+        }
+
         const totalUsers = Object.keys(votingStatus).length;
         const specialParticipated = Object.values(votingStatus).filter(status => status === '우선참여').length;
         const participated = Object.values(votingStatus).filter(status => status === '참여').length;

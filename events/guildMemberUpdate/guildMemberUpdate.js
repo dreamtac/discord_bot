@@ -57,12 +57,37 @@ module.exports = async (oldMember, newMember) => {
             if (VOTE_PERMISSIONS.some(permission => newRoles.includes(permission))) {
                 console.log(`투표 권한 부여: ${newMember.displayName}`);
                 try {
-                    prisma.votingStatus.create({
-                        data: {
-                            userId: newMember.id,
-                            status: '미투표',
+                    // 1. user 찾기
+                    const user = await prisma.user.findFirst({
+                        where: { discordId: newMember.id },
+                    });
+                    if (!user) return;
+
+                    // 2. activeVote 찾기
+                    const activeVote = await prisma.vote.findFirst({
+                        where: { isActive: true },
+                    });
+                    if (!activeVote) return;
+
+                    // 3. 이미 VoteStatus가 있는지 확인
+                    const existingVoteStatus = await prisma.voteStatus.findFirst({
+                        where: {
+                            userId: user.id,
+                            voteId: activeVote.id,
                         },
                     });
+
+                    // 4. 없으면 생성
+                    if (!existingVoteStatus) {
+                        await prisma.voteStatus.create({
+                            data: {
+                                userId: user.id,
+                                status: '미투표',
+                                voteId: activeVote.id,
+                            },
+                        });
+                        console.log('VoteStatus 생성 완료');
+                    }
                 } catch (error) {
                     console.error('투표 권한 부여 중 오류 발생:', error);
                 }
