@@ -3,6 +3,7 @@ const { ButtonBuilder, ButtonStyle, ActionRowBuilder, SlashCommandBuilder, Embed
 module.exports = {
     run: async ({ interaction }) => {
         console.log('next.js 실행 - ', interaction.member.displayName);
+        const isDev = process.env.NODE_ENV === 'development';
 
         // 공개 임베드 생성 (모두에게 보이는 메시지)
         const publicEmbed = new EmbedBuilder()
@@ -28,6 +29,7 @@ module.exports = {
         await interaction.reply({
             embeds: [publicEmbed],
             components: [new ActionRowBuilder().addComponents(tokenButton)],
+            ephemeral: isDev,
         });
         console.log('공개 메시지 전송 완료');
     },
