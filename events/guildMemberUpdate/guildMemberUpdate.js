@@ -2,6 +2,10 @@ const { VOTE_PERMISSIONS } = require('../../utils/constants');
 const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 
+/*
+ todo - 유저 displayName 변경시 Next 프로젝트의 DB 업데이트
+*/
+
 // 중복 이벤트 방지를 위한 캐시
 const recentUpdates = new Map();
 const DEBOUNCE_TIME = 2000; // 2초 동안 같은 사용자에 대한 중복 이벤트 무시

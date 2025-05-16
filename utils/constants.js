@@ -1,4 +1,4 @@
-const VOTE_PERMISSIONS = ['응애', '노역꾼', 'GANG', '돚거단', '포도당', '접어'];
+const VOTE_PERMISSIONS = ['응애', '노예왕', '노역꾼', 'GANG', '돚거단', '포도당', '접어'];
 
 const CREATE_VOTE_PERMISSIONS = ['운영진', '관리자'];
 const CREATE_VOTE_PERMISSIONS_DEV = ['노역꾼'];

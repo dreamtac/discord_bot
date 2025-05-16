@@ -3,6 +3,7 @@ const votingStatus = require('../../votingStatus');
 const { getVoiceUser } = require('../../index');
 const jwt = require('jsonwebtoken');
 const prisma = require('../../utils/prisma');
+const { VOTE_PERMISSIONS } = require('../../utils/constants');
 
 module.exports = async interaction => {
     if (!interaction.isButton()) return;
@@ -15,14 +16,23 @@ module.exports = async interaction => {
     try {
         // 토큰 발급 버튼 클릭 이벤트 처리
         if (interaction.customId === 'generate_token') {
+            if (!interaction.member.roles.cache.some(role => VOTE_PERMISSIONS.includes(role.name))) {
+                await interaction.reply({
+                    content: `❌ 권한이 없습니다. 투표 관계자만 토큰을 발급 받을 수 있습니다.`,
+                    ephemeral: true,
+                });
+                setTimeout(() => {
+                    interaction.deleteReply().catch(console.error);
+                }, 10000);
+                return;
+            }
             // JWT 토큰 생성
             const token = jwt.sign(
                 {
-                    userId: interaction.user.id,
-                    username: interaction.user.username,
-                    nickname: interaction.user.displayName || interaction.user.username,
-                    type: 'vote',
-                    exp: Math.floor(Date.now() / 1000) + 60 * 10, // 10분 후 만료
+                    discordId: interaction.user.id,
+                    displayName: interaction.user.displayName || interaction.user.username,
+                    type: 'archive',
+                    exp: Math.floor(Date.now() / 1000) + 60 * 3, // 3분 후 만료
                 },
                 process.env.JWT_SECRET
             );
@@ -33,15 +43,15 @@ module.exports = async interaction => {
             // 개인 임베드 생성 (클릭한 사용자에게만 보이는 메시지)
             const privateEmbed = new EmbedBuilder()
                 .setColor(0x00ff00)
-                .setTitle('🔐 개인 투표 링크 발급 완료')
+                .setTitle('🔐 과거 투표 아카이브 사이트 링크 발급 완료')
                 .setDescription(
-                    `**${interaction.user.displayName}님**, 투표 시스템 접속을 위한 개인 링크가 발급되었습니다.\n아래 버튼을 클릭하여 투표 페이지로 이동하세요.`
+                    `**${interaction.user.displayName}님**, 사이트 접속을 위한 개인 링크가 발급되었습니다.\n아래 버튼을 클릭하여 아카이브 페이지로 이동하세요.`
                 )
-                .setFooter({ text: '이 링크는 발급 후 10분간 유효하며, 본인만 사용할 수 있습니다.' });
+                .setFooter({ text: '이 링크는 발급 후 3분간 유효하며, 본인만 사용할 수 있습니다.' });
 
-            // 투표 사이트 이동 버튼
+            // 아카이브 사이트 이동 버튼
             const linkButton = new ButtonBuilder()
-                .setLabel('투표 사이트로 이동')
+                .setLabel('아카이브 사이트로 이동')
                 .setStyle(ButtonStyle.Link)
                 .setURL(voteUrl);
 
@@ -51,6 +61,9 @@ module.exports = async interaction => {
                 components: [new ActionRowBuilder().addComponents(linkButton)],
                 ephemeral: true, // 개인 메시지로 전송 (다른 사용자에게는 보이지 않음)
             });
+            setTimeout(() => {
+                interaction.deleteReply().catch(console.error);
+            }, 180000); // 3분 후 삭제
             console.log(`${interaction.user.username}에게 개인 링크 전송 완료`);
             return;
         }

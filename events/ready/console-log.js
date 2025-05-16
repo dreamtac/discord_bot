@@ -68,12 +68,3 @@ module.exports = async client => {
         }
     });
 };
-
-// const response = await axios.post(VERCEL_API_URL, {}, {
-//     headers: {
-//       'Authorization': `Bearer ${API_SECRET}`,
-//       'Content-Type': 'application/json'
-//     }
-//   });
-
-//   console.log('투표 상태 업데이트 결과:', response.data);

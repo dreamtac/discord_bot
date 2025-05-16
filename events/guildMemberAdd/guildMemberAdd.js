@@ -2,6 +2,10 @@ const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 const { VOTE_PERMISSIONS } = require('../../utils/constants');
 
+/*
+ todo - 유저 입장시 next 프로젝트의 DB에 유저 생성
+*/
+
 // 새 멤버 서버 입장 시 DB에 추가
 module.exports = async member => {
     try {
