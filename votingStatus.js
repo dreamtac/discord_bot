@@ -297,7 +297,7 @@ module.exports = {
             });
 
             lastVotingStatus = { ...votingStatus };
-            lastOrder = { ...order };
+            lastOrder = [...order];
             lastVoteId = activeVoteId;
 
             // 메모리 상태 초기화
