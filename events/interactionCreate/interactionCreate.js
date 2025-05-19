@@ -16,6 +16,7 @@ module.exports = async interaction => {
     try {
         // 토큰 발급 버튼 클릭 이벤트 처리
         if (interaction.customId === 'generate_token') {
+            console.log(interaction.member.displayName);
             if (!interaction.member.roles.cache.some(role => VOTE_PERMISSIONS.includes(role.name))) {
                 await interaction.reply({
                     content: `❌ 권한이 없습니다. 투표 관계자만 토큰을 발급 받을 수 있습니다.`,
@@ -30,7 +31,7 @@ module.exports = async interaction => {
             const token = jwt.sign(
                 {
                     discordId: interaction.user.id,
-                    displayName: interaction.user.displayName || interaction.user.username,
+                    displayName: interaction.member.displayName,
                     type: 'archive',
                     exp: Math.floor(Date.now() / 1000) + 60 * 3, // 3분 후 만료
                 },
