@@ -39,7 +39,8 @@ module.exports = async interaction => {
             );
 
             // 토큰이 포함된 투표 URL 생성
-            const voteUrl = `${process.env.NEXT_URL}/auth/verify?token=${token}`;
+            // const voteUrl = `${process.env.NEXT_URL}/auth/verify?token=${token}`;
+            const voteUrl = `https://bdo-web.vercel.app/auth/verify?token=${token}`;
 
             // 개인 임베드 생성 (클릭한 사용자에게만 보이는 메시지)
             const privateEmbed = new EmbedBuilder()

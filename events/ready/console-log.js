@@ -44,6 +44,7 @@ module.exports = async client => {
                             number: true,
                             user: {
                                 select: {
+                                    discordId: true,
                                     displayName: true,
                                 },
                             },

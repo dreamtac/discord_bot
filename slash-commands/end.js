@@ -33,6 +33,7 @@ module.exports = {
                     number: true,
                     user: {
                         select: {
+                            discordId: true,
                             displayName: true,
                         },
                     },

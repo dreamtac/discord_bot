@@ -29,7 +29,7 @@ module.exports = {
         await interaction.reply({
             embeds: [publicEmbed],
             components: [new ActionRowBuilder().addComponents(tokenButton)],
-            ephemeral: isDev,
+            // ephemeral: isDev,
         });
         console.log('공개 메시지 전송 완료');
     },
