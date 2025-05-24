@@ -112,6 +112,9 @@ module.exports = async (oldMember, newMember) => {
                             },
                         });
                         console.log('VoteStatus 생성 완료');
+                        // 여기서 order 동기화!
+                        await votingStatus.syncOrderWithDB();
+                        console.log('order 배열이 DB number 기준으로 동기화됨');
                     }
                 } catch (error) {
                     console.error('투표 권한 부여 중 오류 발생:', error);

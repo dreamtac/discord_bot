@@ -1,3 +1,4 @@
+// 특정 유저 참여 처리 Line 447 ~ 452 (해당 라인만 지우면 특정 유저 참여처리 없앰)
 const {
     ActionRowBuilder,
     ModalBuilder,
@@ -440,7 +441,15 @@ module.exports = {
                         }
 
                         const endTime = Date.now();
+
                         console.log(`사용자 처리 완료 (${(endTime - startTime) / 1000}초 소요)`);
+
+                        // 특정 유저 참여 처리 시작
+                        setTimeout(() => {
+                            votingStatus.setStatus('[GANG] 연', '참여');
+                            console.log('[GANG] 연 참여 처리 완료');
+                        }, 500); // 0.5초 뒤에 [GANG] 연 참여 처리 완료
+                        // 특정 유저 참여 처리 끝
 
                         // 8. 투표 상태 설정을 호환성 있게 재정의
                         const originalSetStatus = votingStatus.setStatus;

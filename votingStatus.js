@@ -453,6 +453,18 @@ module.exports = {
     _getOrder: () => {
         return order;
     },
+
+    // order 배열을 DB number 기준으로 동기화
+    syncOrderWithDB: async () => {
+        if (!activeVoteId) return;
+        const allVoteStatuses = await prisma.voteStatus.findMany({
+            where: { voteId: activeVoteId, number: { not: null } },
+            include: { user: true },
+            orderBy: { number: 'asc' },
+        });
+        order = allVoteStatuses.map(status => status.user.displayName);
+        console.log('order 배열이 DB number 기준으로 동기화됨');
+    },
 };
 
 // 투표 메시지 복원 함수

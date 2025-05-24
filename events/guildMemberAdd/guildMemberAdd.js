@@ -6,9 +6,34 @@ const { VOTE_PERMISSIONS } = require('../../utils/constants');
  todo - 유저 입장시 next 프로젝트의 DB에 유저 생성
 */
 
+// 중복 이벤트 방지를 위한 캐시
+const recentJoins = new Map();
+const DEBOUNCE_TIME = 1000; // 1초 동안 같은 사용자에 대한 중복 이벤트 무시
+
 // 새 멤버 서버 입장 시 DB에 추가
 module.exports = async member => {
     try {
+        // 디바운스: 최근에 처리한 유저인지 확인
+        const userId = member.id;
+        const now = Date.now();
+        if (recentJoins.has(userId)) {
+            const lastJoin = recentJoins.get(userId);
+            if (now - lastJoin < DEBOUNCE_TIME) {
+                console.log(
+                    `중복 guildMemberAdd 이벤트 무시: ${member.displayName} (${userId}) (${now - lastJoin}ms 내)`
+                );
+                return;
+            }
+        }
+        recentJoins.set(userId, now);
+        // 오래된 캐시 항목 정리 (5분 이상 된 항목)
+        const CACHE_LIFETIME = 5 * 60 * 1000; // 5분
+        for (const [key, timestamp] of recentJoins.entries()) {
+            if (now - timestamp > CACHE_LIFETIME) {
+                recentJoins.delete(key);
+            }
+        }
+
         console.log(`새 멤버 입장 감지: ${member.displayName} (ID: ${member.id})`);
 
         // 멤버가 봇인 경우 무시
