@@ -4,6 +4,7 @@ const cron = require('node-cron');
 const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 const { default: axios } = require('axios');
+const logger = require('../../utils/logger');
 
 module.exports = async client => {
     console.log(`${client.user.username} is online. - ${krTime}`);
@@ -63,11 +64,14 @@ module.exports = async client => {
                     });
 
                     console.log(`cron - 투표 ID:${activeVote.id}가 종료되었습니다.`);
+                    logger.info(`cron - 투표 ID:${activeVote.id}가 종료되었습니다.`);
                 } catch (err) {
                     console.log('cron - 투표 종료 중 오류 발생:', err);
+                    logger.error('cron - 투표 종료 중 오류 발생:', err);
                 }
             } catch (error) {
                 console.log('cron - 오류 발생:', error);
+                logger.error('cron - 오류 발생:', error);
             }
         },
         {

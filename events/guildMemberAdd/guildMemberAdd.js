@@ -1,6 +1,7 @@
 const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
 const { VOTE_PERMISSIONS } = require('../../utils/constants');
+const logger = require('../../utils/logger');
 
 /*
  todo - 유저 입장시 next 프로젝트의 DB에 유저 생성
@@ -22,6 +23,9 @@ module.exports = async member => {
                 console.log(
                     `중복 guildMemberAdd 이벤트 무시: ${member.displayName} (${userId}) (${now - lastJoin}ms 내)`
                 );
+                logger.info(
+                    `중복 guildMemberAdd 이벤트 무시: ${member.displayName} (${userId}) (${now - lastJoin}ms 내)`
+                );
                 return;
             }
         }
@@ -33,8 +37,8 @@ module.exports = async member => {
                 recentJoins.delete(key);
             }
         }
-
         console.log(`새 멤버 입장 감지: ${member.displayName} (ID: ${member.id})`);
+        logger.info(`새 멤버 입장 감지: ${member.displayName} (ID: ${member.id})`);
 
         // 멤버가 봇인 경우 무시
         if (member.user.bot) {
@@ -49,6 +53,7 @@ module.exports = async member => {
 
         if (existingUser) {
             console.log(`사용자가 이미 DB에 존재합니다: ${member.displayName} (ID: ${member.id})`);
+            logger.info(`사용자가 이미 DB에 존재합니다: ${member.displayName} (ID: ${member.id})`);
 
             // displayName이 변경되었는지 확인하고 업데이트
             if (existingUser.displayName !== member.displayName) {
@@ -60,6 +65,7 @@ module.exports = async member => {
                     },
                 });
                 console.log(`기존 사용자 정보 업데이트: ${existingUser.displayName} → ${member.displayName}`);
+                logger.info(`기존 사용자 정보 업데이트: ${existingUser.displayName} → ${member.displayName}`);
             }
             return;
         }
@@ -80,6 +86,7 @@ module.exports = async member => {
         });
 
         console.log(`새 사용자 DB 등록 완료: ${member.displayName} (ID: ${member.id})`);
+        logger.info(`새 사용자 DB 등록 완료: ${member.displayName} (ID: ${member.id})`);
 
         // 현재 활성화된 투표가 있는지 확인
         const activeVote = await prisma.vote.findFirst({
@@ -106,13 +113,16 @@ module.exports = async member => {
             votingStatus.getStatus()[member.displayName] = '미투표';
 
             console.log(`${member.displayName} 사용자의 투표 상태가 '미투표'로 초기화되었습니다.`);
+            logger.info(`${member.displayName} 사용자의 투표 상태가 '미투표'로 초기화되었습니다.`);
 
             // 추가된 사용자가 있으므로 투표 현황 UI 업데이트 (선택 사항)
             // 필요한 경우 임베드 메시지 업데이트 로직 추가
         } else {
             console.log(`${member.displayName} 사용자는 필요한 역할이 없어 투표 상태를 생성하지 않습니다.`);
+            logger.info(`${member.displayName} 사용자는 필요한 역할이 없어 투표 상태를 생성하지 않습니다.`);
         }
     } catch (error) {
         console.error('새 멤버 처리 중 오류 발생:', error);
+        logger.error('새 멤버 처리 중 오류 발생:', error);
     }
 };

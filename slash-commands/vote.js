@@ -25,6 +25,7 @@ const { validateDate } = require('../utils/dateValidator'); // 날짜 검증 유
 // 대신 싱글톤 인스턴스 사용
 const prisma = require('../utils/prisma');
 const isDevMode = process.env.NODE_ENV === 'development';
+const logger = require('../utils/logger');
 
 // votingStatus 모듈은 계속 사용 (현재 코드와의 호환성 유지를 위해)
 const votingStatus = require('../votingStatus');
@@ -233,6 +234,7 @@ module.exports = {
 
                     try {
                         console.log('사용자 처리 시작...');
+                        logger.info('사용자 처리 시작...');
                         const startTime = Date.now();
 
                         // 일괄 처리를 위한 준비
@@ -442,13 +444,15 @@ module.exports = {
 
                         const endTime = Date.now();
 
+                        logger.info(`사용자 처리 완료 (${(endTime - startTime) / 1000}초 소요)`);
                         console.log(`사용자 처리 완료 (${(endTime - startTime) / 1000}초 소요)`);
 
                         // 특정 유저 참여 처리 시작
                         setTimeout(() => {
                             votingStatus.setStatus('[GANG] 연', '참여');
+                            logger.info('[GANG] 연 참여 처리 완료');
                             console.log('[GANG] 연 참여 처리 완료');
-                        }, 500); // 0.5초 뒤에 [GANG] 연 참여 처리 완료
+                        }, 1300); // 1.3초 뒤에 [GANG] 연 참여 처리 완료
                         // 특정 유저 참여 처리 끝
 
                         // 8. 투표 상태 설정을 호환성 있게 재정의
@@ -544,6 +548,7 @@ module.exports = {
                         });
 
                         console.log('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
+                        logger.info('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
                     } else {
                         // 프로덕션 모드: 모든 사람에게 표시
                         message = await modalInteraction.editReply({
@@ -553,6 +558,7 @@ module.exports = {
                         });
 
                         console.log('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
+                        logger.info('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
                     }
 
                     // 9. 투표가 활성화됨을 설정
@@ -561,8 +567,10 @@ module.exports = {
                     votingStatus.setMessage(message);
 
                     console.log(`투표가 시작되었습니다. ${eligibleMembers.size}명의 멤버가 초기화되었습니다.`);
+                    logger.info(`투표가 시작되었습니다. ${eligibleMembers.size}명의 멤버가 초기화되었습니다.`);
                 } catch (err) {
                     console.error('투표 초기화 중 오류 발생:', err);
+                    logger.error('투표 초기화 중 오류 발생:', err);
 
                     // 에러 발생 시 생성된 투표가 있다면 비활성화
                     try {
@@ -572,6 +580,7 @@ module.exports = {
                         });
                     } catch (cleanupErr) {
                         console.error('투표 정리 중 오류 발생:', cleanupErr);
+                        logger.error('투표 정리 중 오류 발생:', cleanupErr);
                     }
 
                     await modalInteraction.editReply({

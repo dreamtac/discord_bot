@@ -1,6 +1,7 @@
 const { VOTE_PERMISSIONS } = require('../../utils/constants');
 const prisma = require('../../utils/prisma');
 const votingStatus = require('../../votingStatus');
+const logger = require('../../utils/logger');
 
 /*
  todo - 유저 displayName 변경시 Next 프로젝트의 DB 업데이트
@@ -19,6 +20,7 @@ module.exports = async (oldMember, newMember) => {
     // 변경 사항이 없으면 무시
     if (!displayNameChanged && !rolesChanged) {
         console.log('변경 사항이 없습니다. (업데이트 취소)');
+        logger.info('변경 사항이 없습니다. (업데이트 취소)');
         return;
     }
 
@@ -28,6 +30,7 @@ module.exports = async (oldMember, newMember) => {
     });
     if (!user) {
         console.log(`DB에서 사용자를 찾을 수 없음: discordId ${newMember.id}`);
+        logger.info(`DB에서 사용자를 찾을 수 없음: discordId ${newMember.id}`);
         return;
     }
 
@@ -62,6 +65,7 @@ module.exports = async (oldMember, newMember) => {
         // 변경 내용 로깅
         if (displayNameChanged) {
             console.log(`닉네임 변경 감지: ${oldMember.displayName} → ${newMember.displayName}`);
+            logger.info(`닉네임 변경 감지: ${oldMember.displayName} → ${newMember.displayName}`);
             await prisma.user.update({
                 where: { discordId: newMember.id },
                 data: {
@@ -74,6 +78,7 @@ module.exports = async (oldMember, newMember) => {
             const oldRoles = oldMember.roles.cache.map(role => role.name).join(', ');
             const newRoles = newMember.roles.cache.map(role => role.name).join(', ');
             console.log(`역할 변경 감지: [${oldRoles}] → [${newRoles}]`);
+            logger.info(`역할 변경 감지: [${oldRoles}] → [${newRoles}]`);
             await prisma.user.update({
                 where: { discordId: newMember.id },
                 data: {
@@ -82,6 +87,7 @@ module.exports = async (oldMember, newMember) => {
             });
             if (VOTE_PERMISSIONS.some(permission => newRoles.includes(permission))) {
                 console.log(`투표 권한 부여: ${newMember.displayName}`);
+                logger.info(`투표 권한 부여: ${newMember.displayName}`);
                 try {
                     // 1. user 찾기
                     const user = await prisma.user.findFirst({
@@ -118,6 +124,7 @@ module.exports = async (oldMember, newMember) => {
                     }
                 } catch (error) {
                     console.error('투표 권한 부여 중 오류 발생:', error);
+                    logger.error('투표 권한 부여 중 오류 발생:', error);
                 }
             }
         }
@@ -150,6 +157,7 @@ module.exports = async (oldMember, newMember) => {
         }
     } catch (error) {
         console.error('사용자 정보 업데이트 중 오류 발생:', error);
+        logger.error('사용자 정보 업데이트 중 오류 발생:', error);
     }
 };
 

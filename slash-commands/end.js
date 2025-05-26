@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const votingStatus = require('../votingStatus');
 const prisma = require('../utils/prisma'); // Prisma 싱글톤 인스턴스 가져오기
 const { default: axios } = require('axios');
+const logger = require('../utils/logger');
 
 module.exports = {
     run: async ({ interaction }) => {
@@ -53,8 +54,10 @@ module.exports = {
 
             await interaction.editReply({ content: '투표가 종료되었습니다.', ephemeral: true });
             console.log(`투표 ID:${activeVote.id}가 종료되었습니다.`);
+            logger.info(`투표 ID:${activeVote.id}가 종료되었습니다.`);
         } catch (err) {
             console.error('투표 종료 중 오류 발생:', err);
+            logger.error('투표 종료 중 오류 발생:', err);
             await interaction.editReply({ content: '투표 종료 중 오류가 발생했습니다.', ephemeral: true });
         }
     },

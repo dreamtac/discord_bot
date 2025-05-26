@@ -4,6 +4,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 // const VotingState = require('./models/votingStateDB');
 const moment = require('moment-timezone');
 const prisma = require('./utils/prisma');
+const logger = require('./utils/logger');
 
 // 메모리 캐시 (성능 최적화용)
 let votingStatus = {}; // 각 유저별 투표 상태를 저장할 객체
@@ -218,8 +219,14 @@ module.exports = {
                                     number || '없음'
                                 })`
                             );
+                            logger.info(
+                                `${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: ${
+                                    number || '없음'
+                                })`
+                            );
                         } catch (dbErr) {
                             console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
+                            logger.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
                         }
                     } else if (status === '불참' || status === '미투표') {
                         // 불참 또는 미투표인 경우 배열에서 제거만 하면 됨
@@ -251,8 +258,10 @@ module.exports = {
                             });
 
                             console.log(`${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: 없음)`);
+                            logger.info(`${userId}님의 투표 상태가 '${status}'로 업데이트되었습니다. (순번: 없음)`);
                         } catch (dbErr) {
                             console.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
+                            logger.error('투표 상태 DB 업데이트 중 오류 발생:', dbErr);
                         }
                     }
                 } catch (err) {

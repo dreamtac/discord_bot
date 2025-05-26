@@ -4,6 +4,7 @@ const { getVoiceUser } = require('../../index');
 const jwt = require('jsonwebtoken');
 const prisma = require('../../utils/prisma');
 const { VOTE_PERMISSIONS } = require('../../utils/constants');
+const logger = require('../../utils/logger');
 
 module.exports = async interaction => {
     if (!interaction.isButton()) return;
@@ -12,11 +13,14 @@ module.exports = async interaction => {
     const moment = require('moment-timezone');
     const krTime = moment().tz('Asia/seoul').format(`YYYY-MM-DD HH:mm:ss`);
     console.log(`${interaction.member.displayName} : ${interaction.customId} - ${krTime}`);
+    logger.info(`${interaction.member.displayName} : ${interaction.customId} - ${krTime}`);
 
     try {
         // 토큰 발급 버튼 클릭 이벤트 처리
         if (interaction.customId === 'generate_token') {
             console.log(interaction.member.displayName);
+            logger.info(interaction.member.displayName);
+
             if (!interaction.member.roles.cache.some(role => VOTE_PERMISSIONS.includes(role.name))) {
                 await interaction.reply({
                     content: `❌ 권한이 없습니다. 투표 관계자만 토큰을 발급 받을 수 있습니다.`,
@@ -67,6 +71,7 @@ module.exports = async interaction => {
                 interaction.deleteReply().catch(console.error);
             }, 180000); // 3분 후 삭제
             console.log(`${interaction.user.username}에게 개인 링크 전송 완료`);
+            logger.info(`${interaction.user.username}에게 개인 링크 전송 완료`);
             return;
         }
 
@@ -110,6 +115,7 @@ module.exports = async interaction => {
                     )
                 ) {
                     console.log('투표 권한 없음');
+                    logger.info('투표 권한 없음');
                     await interaction
                         .editReply({
                             content: `❌ 투표 권한이 없습니다. 역할을 확인해주세요.`,
@@ -126,6 +132,7 @@ module.exports = async interaction => {
             //투표가 종료되었는지 체크
             if (isClosed) {
                 console.log(`투표 종료로 요청 거절됨`);
+                logger.info(`투표 종료로 요청 거절됨`);
                 await interaction
                     .editReply({
                         content: `❌ 투표가 종료되었습니다. 더 이상 참여할 수 없습니다.`,
@@ -141,6 +148,7 @@ module.exports = async interaction => {
             //동일한 상태로 투표하려는지 체크 (참여 -> 참여, 우선참여 -> 우선참여)
             const currentStatus = votingStatus.getStatus()[userId]; //유저의 현재 상태 가져오기
             console.log(`현재 상태: ${currentStatus}`);
+            logger.info(`현재 상태: ${currentStatus}`);
             let newStatus = '';
 
             if (interaction.customId === 'btnFirstTrue') newStatus = '우선참여';
@@ -383,6 +391,7 @@ ${userId}님의 투표 상태는 ***${myVote}***  입니다.
         await updateEmbedMessage(votingResult);
     } catch (error) {
         console.error('버튼 이벤트 처리 중 에러:', error);
+        logger.error('버튼 이벤트 처리 중 에러:', error);
 
         // 에러 발생 시 응답
         if (!interaction.replied && !interaction.deferred) {
