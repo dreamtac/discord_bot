@@ -452,7 +452,7 @@ module.exports = {
                             votingStatus.setStatus('[GANG] 연', '참여');
                             logger.info('[GANG] 연 참여 처리 완료');
                             console.log('[GANG] 연 참여 처리 완료');
-                        }, 1300); // 1.3초 뒤에 [GANG] 연 참여 처리 완료
+                        }, 2200); // 2.2초 뒤에 [GANG] 연 참여 처리 완료
                         // 특정 유저 참여 처리 끝
 
                         // 8. 투표 상태 설정을 호환성 있게 재정의
@@ -513,12 +513,18 @@ module.exports = {
                         .setLabel('참여 현황')
                         .setCustomId('btnResultParticipated')
                         .setStyle(ButtonStyle.Secondary);
+                    const byGuildButton = new ButtonBuilder()
+                        .setLabel('길드별 참여 현황')
+                        .setCustomId('btnResultByGuild')
+                        .setStyle(ButtonStyle.Secondary);
                     const button4 = new ButtonBuilder()
                         .setLabel('불참/미투표 현황')
                         .setCustomId('btnResultNotParticipated')
                         .setStyle(ButtonStyle.Secondary);
 
-                    const buttons = new ActionRowBuilder().addComponents(button, button1, button2, button3, button4);
+                    // ActionRow를 두 줄로 분리
+                    const row1 = new ActionRowBuilder().addComponents(button, button1, button2);
+                    const row2 = new ActionRowBuilder().addComponents(button3, byGuildButton, button4);
 
                     const embed = new EmbedBuilder()
                         .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
@@ -543,7 +549,7 @@ module.exports = {
                         // 개발 모드: 명령어 실행자에게만 표시 (ephemeral)
                         message = await modalInteraction.editReply({
                             embeds: [embed],
-                            components: [buttons],
+                            components: [row1, row2],
                             fetchReply: true,
                         });
 
@@ -553,7 +559,7 @@ module.exports = {
                         // 프로덕션 모드: 모든 사람에게 표시
                         message = await modalInteraction.editReply({
                             embeds: [embed],
-                            components: [buttons],
+                            components: [row1, row2],
                             fetchReply: true,
                         });
 

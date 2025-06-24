@@ -19,6 +19,8 @@ module.exports = async client => {
             console.log(`매일 밤 9:00 cron 실행 - ${currentTime}`);
 
             try {
+                const today = moment().tz('Asia/seoul').format(`YYYY-MM-DD`);
+
                 // 활성화된 투표가 있는지 확인
                 const activeVote = await prisma.vote.findFirst({
                     where: { isActive: true },
@@ -26,6 +28,14 @@ module.exports = async client => {
 
                 if (!activeVote) {
                     console.log('cron 실행 - 진행 중인 투표가 없습니다.');
+                    return;
+                }
+
+                const voteCreateDate = moment(activeVote.createdAt).tz('Asia/seoul').format(`YYYY-MM-DD`);
+
+                // 오늘 생성된 투표일 경우 종료x
+                if (voteCreateDate === today) {
+                    console.log('cron 실행 - 오늘 생성된 투표이므로 종료하지 않습니다.');
                     return;
                 }
 

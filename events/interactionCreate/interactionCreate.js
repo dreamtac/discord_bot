@@ -218,7 +218,7 @@ module.exports = async interaction => {
 
                         await interaction
                             .editReply({
-                                content: `✅ ${newStatus}로 변경되었습니다.`,
+                                content: `✅ ${currentStatus} -> ${newStatus} 변경되었습니다.`,
                                 components: [],
                                 ephemeral: true,
                             })
@@ -293,6 +293,7 @@ module.exports = async interaction => {
             }, 5000);
         } else if (
             interaction.customId === 'btnResultParticipated' ||
+            interaction.customId === 'btnResultByGuild' ||
             interaction.customId === 'btnResultNotParticipated'
         ) {
             // 운영진 권한 확인
@@ -312,6 +313,7 @@ module.exports = async interaction => {
             }
 
             if (interaction.customId === 'btnResultParticipated') {
+                console.log('참여자 현황 버튼 클릭');
                 const voiceUser = getVoiceUser();
                 // 우선참여와 참여자만 보이기 (이미 로드된 데이터 사용)
                 const result = votingResult;
@@ -357,6 +359,65 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
 `;
 
                 sendPaginatedMessages(interaction, messageContent);
+            } else if (interaction.customId === 'btnResultByGuild') {
+                console.log('길드별 참여현황 버튼 클릭');
+                const GUILD_NAME = ['GANG', '포도당', '하푸하푸'];
+                const voiceUser = getVoiceUser();
+                const result = votingResult;
+
+                // 1. 전체 참여자(우선참여+참여) 목록을 순번과 함께 합치기
+                const allParticipants = [
+                    ...(result.specialParticipatedUser || []).map((user, idx) => ({
+                        user,
+                        type: '우선참여',
+                        number: idx + 1,
+                    })),
+                    ...(result.participatedUser || []).map((user, idx) => ({
+                        user,
+                        type: '참여',
+                        number: (result.specialParticipatedUser?.length || 0) + idx + 1,
+                    })),
+                ];
+
+                // 2. 길드별로 그룹화
+                const guildMap = {};
+                for (const guild of GUILD_NAME) {
+                    guildMap[guild] = [];
+                }
+
+                // 3. 각 참여자의 길드 추출 및 그룹화
+                for (const participant of allParticipants) {
+                    // 디스코드에서 유저 객체 찾기 (닉네임 기준)
+                    const member = interaction.guild.members.cache.find(m => m.displayName === participant.user);
+                    // 유저의 길드 역할 추출
+                    const userGuild = member
+                        ? GUILD_NAME.find(guild => member.roles.cache.some(role => role.name === guild))
+                        : null;
+
+                    if (userGuild) {
+                        guildMap[userGuild].push({
+                            ...participant,
+                            displayName: participant.user,
+                            isInVoice: voiceUser.includes(participant.user),
+                        });
+                    }
+                }
+
+                // 4. 메시지 생성
+                let messageContent = `**길드별 참여 현황**\n`;
+                for (const guild of GUILD_NAME) {
+                    messageContent += `\n**---- ${guild} ----**\n`;
+                    if (guildMap[guild].length === 0) {
+                        messageContent += '참여자 없음\n';
+                    } else {
+                        messageContent += guildMap[guild]
+                            .map(p => `${p.number}. ${p.displayName} - ${p.type}${p.isInVoice ? ' ✅' : ''}`)
+                            .join('\n');
+                        messageContent += '\n';
+                    }
+                }
+
+                await sendPaginatedMessages(interaction, messageContent);
             } else if (interaction.customId === 'btnResultNotParticipated') {
                 // 불참자와 미투표자만 보이기 (이미 로드된 데이터 사용)
                 const result = votingResult;
