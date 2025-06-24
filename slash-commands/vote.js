@@ -449,9 +449,9 @@ module.exports = {
 
                         // 특정 유저 참여 처리 시작
                         setTimeout(() => {
-                            votingStatus.setStatus('[GANG] 연', '참여');
-                            logger.info('[GANG] 연 참여 처리 완료');
-                            console.log('[GANG] 연 참여 처리 완료');
+                            votingStatus.setStatus('[GANG] 연이(전자이)', '참여');
+                            logger.info('[GANG] 연이(전자이) 참여 처리 완료');
+                            console.log('[GANG] 연이(전자이) 참여 처리 완료');
                         }, 2200); // 2.2초 뒤에 [GANG] 연 참여 처리 완료
                         // 특정 유저 참여 처리 끝
 
