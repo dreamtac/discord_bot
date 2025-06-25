@@ -529,9 +529,28 @@ async function restoreVotingMessage(client, activeVote) {
                 : await guild.channels.fetch(process.env.PRODUCTION_CHANNEL_ID);
 
         // 새 메시지 생성을 위한 임베드 및 버튼 설정 - /투표 명령어와 동일한 디자인 사용
+
+        // 투표 시작 시간 확인하여 일반 참여 버튼 상태 결정
+        const voteStartTime = new Date(activeVote.startTime);
+        const currentTime = new Date();
+        const tenMinutesInMs = 10 * 60 * 1000;
+        const timeElapsed = currentTime.getTime() - voteStartTime.getTime();
+        const isGeneralVotingAllowed = timeElapsed >= tenMinutesInMs;
+
+        // 시간 포맷 함수
+        const getTimeString = date => {
+            return date.toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Asia/Seoul',
+            });
+        };
+
+        const generalVoteTime = new Date(voteStartTime.getTime() + tenMinutesInMs);
+
         const embed = new EmbedBuilder()
-            .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
-            .setTitle(`📢 공성/거점 투표`)
+            .setColor(isGeneralVotingAllowed ? 0x00ff00 : 0x5865f2) // 활성화되면 초록색
+            .setTitle(isGeneralVotingAllowed ? `📢 공성/거점 투표 (일반참여 활성화됨)` : `📢 공성/거점 투표`)
             .setDescription(`${activeVote.description || '서버 재시작으로 복원된 투표입니다.'}`)
             .addFields(
                 { name: '📅 일시', value: `\`${activeVote.date || '정보 없음'}\``, inline: true },
@@ -539,16 +558,36 @@ async function restoreVotingMessage(client, activeVote) {
                 { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
                 {
                     name: '📌 주의사항',
-                    value: '투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.',
+                    value: isGeneralVotingAllowed
+                        ? '🎉 **일반참여가 활성화되었습니다!**\n🔒 **우선참여(특수병)는 마감되었습니다.**\n\n이제 모든 분들이 일반참여로 투표하실 수 있습니다.\n\n투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.'
+                        : `⏰ **우선참여 전용 시간**: ${getTimeString(voteStartTime)} ~ ${getTimeString(
+                              generalVoteTime
+                          )}\n⏰ **일반참여 활성화**: ${getTimeString(
+                              generalVoteTime
+                          )} 이후\n\n투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.`,
                 }
             )
             .setFooter({
                 text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
             });
 
+        // 일반 참여 버튼 상태 설정
+        const generalVoteButton = new ButtonBuilder()
+            .setLabel(isGeneralVotingAllowed ? '참여' : '참여 (일반참여 대기중)')
+            .setCustomId('btnTrue')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(!isGeneralVotingAllowed);
+
+        // 우선참여 버튼 상태 설정
+        const specialVoteButton = new ButtonBuilder()
+            .setLabel(isGeneralVotingAllowed ? '우선참여 (마감)' : '우선참여 (특수병)')
+            .setCustomId('btnFirstTrue')
+            .setStyle(isGeneralVotingAllowed ? ButtonStyle.Secondary : ButtonStyle.Primary)
+            .setDisabled(isGeneralVotingAllowed);
+
         const buttons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setLabel('우선참여 (특수병)').setCustomId('btnFirstTrue').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setLabel('참여').setCustomId('btnTrue').setStyle(ButtonStyle.Primary),
+            specialVoteButton,
+            generalVoteButton,
             new ButtonBuilder().setLabel('불참').setCustomId('btnFalse').setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setLabel('참여 현황')
@@ -573,6 +612,83 @@ async function restoreVotingMessage(client, activeVote) {
         // 새로운 메시지를 생성하고 저장
         const message = await channel.send({ embeds: [embed], components: [buttons] });
         module.exports.setMessage(message); // 메시지 저장
+
+        // 일반 참여가 아직 비활성화된 상태라면, 남은 시간 후 활성화 스케줄링
+        if (!isGeneralVotingAllowed) {
+            const remainingTime = tenMinutesInMs - timeElapsed;
+            console.log(
+                `일반 참여 활성화까지 ${Math.floor(remainingTime / 60000)}분 ${Math.floor(
+                    (remainingTime % 60000) / 1000
+                )}초 남음`
+            );
+
+            setTimeout(async () => {
+                try {
+                    // 투표가 여전히 활성화되어 있는지 확인
+                    const currentVote = await prisma.vote.findFirst({
+                        where: { isActive: true },
+                    });
+
+                    if (!currentVote || currentVote.id !== activeVote.id) {
+                        console.log('투표가 이미 종료되어 일반 참여 활성화를 건너뜁니다.');
+                        return;
+                    }
+
+                    // 활성화된 버튼으로 업데이트
+                    const disabledSpecialButton = new ButtonBuilder()
+                        .setLabel('우선참여 (특수병)')
+                        .setCustomId('btnFirstTrue')
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true);
+
+                    const activeGeneralButton = new ButtonBuilder()
+                        .setLabel('참여')
+                        .setCustomId('btnTrue')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(false);
+
+                    const activeButtons = new ActionRowBuilder().addComponents(
+                        disabledSpecialButton,
+                        activeGeneralButton,
+                        new ButtonBuilder().setLabel('불참').setCustomId('btnFalse').setStyle(ButtonStyle.Danger),
+                        new ButtonBuilder()
+                            .setLabel('참여 현황')
+                            .setCustomId('btnResultParticipated')
+                            .setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder()
+                            .setLabel('불참/미투표 현황')
+                            .setCustomId('btnResultNotParticipated')
+                            .setStyle(ButtonStyle.Secondary)
+                    );
+
+                    const activeEmbed = new EmbedBuilder()
+                        .setColor(0x00ff00)
+                        .setTitle(`📢 공성/거점 투표 (일반참여 활성화됨)`)
+                        .setDescription(`${activeVote.description || '서버 재시작으로 복원된 투표입니다.'}`)
+                        .addFields(
+                            { name: '📅 일시', value: `\`${activeVote.date || '정보 없음'}\``, inline: true },
+                            { name: '🗺️️ 지역', value: `\`${activeVote.region || '정보 없음'}\``, inline: true },
+                            { name: '\u200B', value: '\u200B', inline: true },
+                            {
+                                name: '📌 주의사항',
+                                value: '🎉 **일반참여가 활성화되었습니다!**\n🔒 **우선참여(특수병)는 마감되었습니다.**\n\n이제 모든 분들이 일반참여로 투표하실 수 있습니다.\n\n투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.',
+                            }
+                        )
+                        .setFooter({
+                            text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
+                        });
+
+                    await message.edit({
+                        embeds: [activeEmbed],
+                        components: [activeButtons],
+                    });
+
+                    console.log('복원된 투표 메시지에서 일반 참여 버튼이 활성화되었습니다.');
+                } catch (error) {
+                    console.error('복원된 메시지의 일반 참여 버튼 활성화 중 오류:', error);
+                }
+            }, remainingTime);
+        }
 
         // 메시지 ID를 DB에 저장 또는 업데이트
         await prisma.voteMessage.upsert({

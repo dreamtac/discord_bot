@@ -3,7 +3,7 @@ const votingStatus = require('../../votingStatus');
 const { getVoiceUser } = require('../../index');
 const jwt = require('jsonwebtoken');
 const prisma = require('../../utils/prisma');
-const { VOTE_PERMISSIONS } = require('../../utils/constants');
+const { VOTE_PERMISSIONS, GUILD_NAME } = require('../../utils/constants');
 const logger = require('../../utils/logger');
 
 module.exports = async interaction => {
@@ -80,10 +80,11 @@ module.exports = async interaction => {
 
         const userId = interaction.member.displayName;
 
-        // 투표 현황 보기 권한 체크
+        //투표 현황 보기 권한 체크
         const canViewResult = interaction.member.roles.cache.some(
             role => role.name === 'GANG' || role.name === '하푸하푸' || role.name === '포도당'
         );
+        // const canViewResult = interaction.member.roles.cache.some(role => GUILD_NAME.includes(role.name));
 
         // 투표 진행 상태 DB에서 최신화 (한 번만 로드)
         const isClosed = await votingStatus.checkVotingClosedInDB();
@@ -113,9 +114,61 @@ module.exports = async interaction => {
             interaction.customId === 'btnTrue' ||
             interaction.customId === 'btnFalse'
         ) {
+            // 시간 기반 버튼 차단 로직
+            try {
+                const activeVote = await prisma.vote.findFirst({
+                    where: { isActive: true },
+                    select: { startTime: true },
+                });
+
+                if (activeVote && activeVote.startTime) {
+                    const voteStartTime = new Date(activeVote.startTime);
+                    const currentTime = new Date();
+                    const tenMinutesInMs = 10 * 60 * 100; // 10분을 밀리초로
+                    const timeElapsed = currentTime.getTime() - voteStartTime.getTime();
+
+                    // 일반 참여 버튼: 10분 전에는 차단
+                    if (interaction.customId === 'btnTrue' && timeElapsed < tenMinutesInMs) {
+                        const remainingMs = tenMinutesInMs - timeElapsed;
+                        const remainingMinutes = Math.floor(remainingMs / 60000);
+                        const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+
+                        await interaction
+                            .editReply({
+                                content: `❌ 일반 참여는 투표 시작 후 10분이 지나야 가능합니다.\n\n⏰ **남은 시간**: ${remainingMinutes}분 ${remainingSeconds}초\n\n🔸 **우선참여(특수병)**는 지금 바로 가능합니다!`,
+                                ephemeral: true,
+                            })
+                            .catch(console.error);
+                        setTimeout(() => {
+                            interaction.deleteReply().catch(console.error);
+                        }, 10000);
+                        return;
+                    }
+
+                    // 우선참여 버튼: 10분 후에는 차단
+                    if (interaction.customId === 'btnFirstTrue' && timeElapsed >= tenMinutesInMs) {
+                        await interaction
+                            .editReply({
+                                content: `❌ 우선참여(특수병)는 투표 시작 후 10분까지만 가능합니다.\n\n⏰ **현재는 일반참여 시간**입니다.\n\n🔸 **일반 참여** 버튼을 이용해주세요!`,
+                                ephemeral: true,
+                            })
+                            .catch(console.error);
+                        setTimeout(() => {
+                            interaction.deleteReply().catch(console.error);
+                        }, 10000);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('투표 시간 확인 중 오류:', error);
+                logger.error('투표 시간 확인 중 오류:', error);
+            }
+
             // 투표 권한 체크
             if (process.env.NODE_ENV !== 'development') {
                 if (
+                    // !interaction.member.roles.cache.some(role => GUILD_NAME.includes(role.name)) ||
+                    // interaction.member.roles.cache.some(role => role.name === '용병')
                     interaction.member.roles.cache.some(role => role.name === '용병') ||
                     !interaction.member.roles.cache.some(
                         role => role.name === 'GANG' || role.name === '하푸하푸' || role.name === '포도당'
@@ -176,7 +229,13 @@ module.exports = async interaction => {
             }
 
             // 이미 투표한 상태이고, 다른 상태로 변경하려는 경우
-            if (currentStatus !== '미투표' && currentStatus && currentStatus !== newStatus) {
+            // 단, 우선참여 상태에서는 확인 알림 없이 바로 변경
+            if (
+                currentStatus !== '미투표' &&
+                currentStatus &&
+                currentStatus !== newStatus &&
+                currentStatus !== '우선참여'
+            ) {
                 const confirmButton = new ButtonBuilder()
                     .setCustomId(`confirm_${newStatus}`)
                     .setLabel('확인')
@@ -265,7 +324,7 @@ module.exports = async interaction => {
                     }
                 }
             } else {
-                // 처음 투표하거나, 투표 상태가 없는 경우
+                // 처음 투표하거나, 투표 상태가 없는 경우, 또는 우선참여에서 다른 상태로 변경하는 경우
                 if (votingStatus.isVotingClosed()) {
                     await interaction
                         .editReply({
@@ -279,12 +338,22 @@ module.exports = async interaction => {
                 // 투표 상태 업데이트 (DB 동기화)
                 await votingStatus.setStatus(userId, newStatus);
 
-                await interaction
-                    .editReply({
-                        content: `✅ ${newStatus}로 변경되었습니다.`,
-                        ephemeral: true,
-                    })
-                    .catch(console.error);
+                // 우선참여에서 다른 상태로 변경하는 경우 특별한 메시지 표시
+                if (currentStatus === '우선참여' && currentStatus !== newStatus) {
+                    await interaction
+                        .editReply({
+                            content: `✅ ${currentStatus} -> ${newStatus} 변경되었습니다.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                } else {
+                    await interaction
+                        .editReply({
+                            content: `✅ ${newStatus}로 변경되었습니다.`,
+                            ephemeral: true,
+                        })
+                        .catch(console.error);
+                }
 
                 // 결과 업데이트
                 votingResult = votingStatus.getResult();
@@ -456,11 +525,11 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
                 // console.log(`총 ${allParticipants.length}명의 참여자 생성됨`);
 
                 // === 길드별 필터링 ===
-                const GUILD_NAME = ['GANG', '포도당', '하푸하푸'];
+                const GUILD_LIST = GUILD_NAME;
                 const guildParticipants = {};
 
                 // 각 길드별로 빈 배열 초기화
-                GUILD_NAME.forEach(guildName => {
+                GUILD_LIST.forEach(guildName => {
                     guildParticipants[guildName] = {
                         special: [], // 우선참여자
                         normal: [], // 일반참여자
@@ -471,7 +540,7 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
                 allParticipants.forEach(participant => {
                     // [길드명] 추출 (예: [GANG] 파츄(전자이)(빌더) -> GANG)
                     const guildMatch = participant.user.match(/^\[([^\]]+)\]/);
-                    if (guildMatch && GUILD_NAME.includes(guildMatch[1])) {
+                    if (guildMatch && GUILD_LIST.includes(guildMatch[1])) {
                         const guildName = guildMatch[1];
                         // Discord 자동 번호 매기기 비활성화를 위해 특수 문자 추가
                         const displayText = `**${participant.number}.** ${participant.user}${
@@ -491,7 +560,7 @@ ${userId}님의 투표 상태는 ***${myVote}***  이며, 순번은 ***${myNumbe
                 // === 메시지 생성 ===
                 let messageContent = '**길드별 참여 현황**\n\n';
 
-                GUILD_NAME.forEach(guildName => {
+                GUILD_LIST.forEach(guildName => {
                     const guild = guildParticipants[guildName];
                     messageContent += `**---- ${guildName} ----**\n`;
 

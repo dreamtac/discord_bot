@@ -106,7 +106,7 @@ module.exports = {
             const modalInteraction = await interaction.awaitModalSubmit({ filter, time: 600000 });
 
             // 모달 응답 시 로딩 메시지 표시
-            await modalInteraction.deferReply({ ephemeral: isDevMode });
+            await modalInteraction.deferReply({ ephemeral: false });
 
             const date = modalInteraction.fields.getTextInputValue('inputDate');
             const additionalDescription = modalInteraction.fields.getTextInputValue('inputDescription');
@@ -195,6 +195,7 @@ module.exports = {
                             date: formattedDate,
                             region: selectedRegion,
                             isActive: true,
+                            startTime: new Date(), // 투표 시작 시간 추가
                         },
                     });
 
@@ -491,89 +492,188 @@ module.exports = {
                                 });
                             }
                         };
+
+                        // 9. 투표 메시지 생성 및 표시
+                        const button = new ButtonBuilder()
+                            .setLabel('우선참여 (특수병)')
+                            .setCustomId('btnFirstTrue')
+                            .setStyle(ButtonStyle.Primary);
+                        const button1 = new ButtonBuilder()
+                            .setLabel('참여 (10분 후 활성화)')
+                            .setCustomId('btnTrue')
+                            .setStyle(ButtonStyle.Primary)
+                            .setDisabled(true); // 처음엔 비활성화
+                        const button2 = new ButtonBuilder()
+                            .setLabel('불참')
+                            .setCustomId('btnFalse')
+                            .setStyle(ButtonStyle.Danger);
+                        const button3 = new ButtonBuilder()
+                            .setLabel('참여 현황')
+                            .setCustomId('btnResultParticipated')
+                            .setStyle(ButtonStyle.Secondary);
+                        const byGuildButton = new ButtonBuilder()
+                            .setLabel('길드별 참여 현황')
+                            .setCustomId('btnResultByGuild')
+                            .setStyle(ButtonStyle.Secondary);
+                        const button4 = new ButtonBuilder()
+                            .setLabel('불참/미투표 현황')
+                            .setCustomId('btnResultNotParticipated')
+                            .setStyle(ButtonStyle.Secondary);
+
+                        // ActionRow를 두 줄로 분리
+                        const row1 = new ActionRowBuilder().addComponents(button, button1, button2);
+                        const row2 = new ActionRowBuilder().addComponents(button3, byGuildButton, button4);
+
+                        // 현재 시간 표시를 위한 함수
+                        const getTimeString = date => {
+                            return date.toLocaleTimeString('ko-KR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'Asia/Seoul',
+                            });
+                        };
+
+                        const voteStartTime = new Date();
+                        const generalVoteTime = new Date(voteStartTime.getTime() + 10 * 60 * 1000); //10분 후
+
+                        const embed = new EmbedBuilder()
+                            .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
+                            .setTitle(`📢 공성/거점 투표`)
+                            .addFields(
+                                { name: '📅 일시', value: `\`${formattedDate}\``, inline: true },
+                                { name: '🗺️ 지역', value: `\`${selectedRegion}\``, inline: true },
+                                { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
+                                {
+                                    name: '📌 주의사항',
+                                    value: `⏰ **우선참여 시간**: ${getTimeString(voteStartTime)} ~ ${getTimeString(
+                                        generalVoteTime
+                                    )}\n⏰ **일반참여 활성화**: ${getTimeString(
+                                        generalVoteTime
+                                    )} \n\n투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.`,
+                                }
+                            )
+                            .setDescription(`${description}`)
+                            .setFooter({
+                                text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
+                            });
+
+                        let message;
+
+                        if (isDevMode) {
+                            // 개발 모드: 명령어 실행자에게만 표시 (ephemeral)
+                            message = await modalInteraction.editReply({
+                                embeds: [embed],
+                                components: [row1, row2],
+                                fetchReply: true,
+                            });
+
+                            console.log('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
+                            logger.info('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
+                        } else {
+                            // 프로덕션 모드: 모든 사람에게 표시
+                            message = await modalInteraction.editReply({
+                                embeds: [embed],
+                                components: [row1, row2],
+                                fetchReply: true,
+                            });
+
+                            console.log('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
+                            logger.info('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
+                        }
+
+                        // 10. 투표가 활성화됨을 설정
+                        votingStatus.setVotingActiveStatus(true);
+                        // 11. 메시지 객체 저장
+                        votingStatus.setMessage(message);
+
+                        // 12. 10분 후 일반 참여 버튼 활성화
+                        setTimeout(async () => {
+                            try {
+                                // 활성화된 투표가 여전히 있는지 확인
+                                const currentVote = await prisma.vote.findFirst({
+                                    where: { isActive: true },
+                                });
+
+                                if (!currentVote || currentVote.id !== newVote.id) {
+                                    console.log('투표가 이미 종료되어 일반 참여 활성화를 건너뜁니다.');
+                                    return;
+                                }
+
+                                // 활성화된 버튼으로 교체
+                                const disabledSpecialButton = new ButtonBuilder()
+                                    .setLabel('우선참여 (특수병)')
+                                    .setCustomId('btnFirstTrue')
+                                    .setStyle(ButtonStyle.Secondary)
+                                    .setDisabled(true); // 우선참여 비활성화
+
+                                const activeButton1 = new ButtonBuilder()
+                                    .setLabel('참여')
+                                    .setCustomId('btnTrue')
+                                    .setStyle(ButtonStyle.Primary)
+                                    .setDisabled(false); // 일반참여 활성화
+
+                                const activeRow1 = new ActionRowBuilder().addComponents(
+                                    disabledSpecialButton,
+                                    activeButton1,
+                                    button2
+                                );
+
+                                // 임베드도 업데이트
+                                const updatedEmbed = new EmbedBuilder()
+                                    .setColor(0x00ff00) // 초록색으로 변경하여 활성화를 표시
+                                    .setTitle(`📢 공성/거점 투표 (일반참여 활성화됨)`)
+                                    .addFields(
+                                        { name: '📅 일시', value: `\`${formattedDate}\``, inline: true },
+                                        { name: '🗺️ 지역', value: `\`${selectedRegion}\``, inline: true },
+                                        { name: '\u200B', value: '\u200B', inline: true },
+                                        {
+                                            name: '📌 주의사항',
+                                            value: '\n\n투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.',
+                                        }
+                                    )
+                                    .setDescription(`${description}`)
+                                    .setFooter({
+                                        text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
+                                    });
+
+                                // 메시지 업데이트
+                                message = await modalInteraction.editReply({
+                                    embeds: [updatedEmbed],
+                                    components: [activeRow1, row2],
+                                    fetchReply: true,
+                                });
+                                // await message.edit({
+                                //     embeds: [updatedEmbed],
+                                //     components: [activeRow1, row2],
+                                // });
+
+                                console.log('일반 참여 버튼이 활성화되었습니다.');
+                                logger.info('일반 참여 버튼이 활성화되었습니다.');
+
+                                // 활성화 알림 메시지 (선택적)
+                                if (!isDevMode) {
+                                    const channel = message.channel;
+                                    const notificationMessage = await channel.send(
+                                        '🔔 **일반 참여가 활성화되었습니다!** 이제 모든 분들이 투표하실 수 있습니다.'
+                                    );
+
+                                    // 알림 메시지는 30초 후 삭제
+                                    setTimeout(() => {
+                                        notificationMessage.delete().catch(console.error);
+                                    }, 30000);
+                                }
+                            } catch (error) {
+                                console.error('일반 참여 버튼 활성화 중 오류 발생:', error);
+                                logger.error('일반 참여 버튼 활성화 중 오류 발생:', error);
+                            }
+                        }, 10 * 60 * 1000); // 10분 = 600,000ms
+
+                        console.log(`투표가 시작되었습니다. ${eligibleMembers.size}명의 멤버가 초기화되었습니다.`);
+                        logger.info(`투표가 시작되었습니다. ${eligibleMembers.size}명의 멤버가 초기화되었습니다.`);
                     } catch (err) {
                         console.error('사용자 처리 중 오류 발생:', err);
                         throw err; // 상위 오류 처리로 전달
                     }
-
-                    // 8. 투표 메시지 생성 및 표시
-                    const button = new ButtonBuilder()
-                        .setLabel('우선참여 (특수병)')
-                        .setCustomId('btnFirstTrue')
-                        .setStyle(ButtonStyle.Primary);
-                    const button1 = new ButtonBuilder()
-                        .setLabel('참여')
-                        .setCustomId('btnTrue')
-                        .setStyle(ButtonStyle.Primary);
-                    const button2 = new ButtonBuilder()
-                        .setLabel('불참')
-                        .setCustomId('btnFalse')
-                        .setStyle(ButtonStyle.Danger);
-                    const button3 = new ButtonBuilder()
-                        .setLabel('참여 현황')
-                        .setCustomId('btnResultParticipated')
-                        .setStyle(ButtonStyle.Secondary);
-                    const byGuildButton = new ButtonBuilder()
-                        .setLabel('길드별 참여 현황')
-                        .setCustomId('btnResultByGuild')
-                        .setStyle(ButtonStyle.Secondary);
-                    const button4 = new ButtonBuilder()
-                        .setLabel('불참/미투표 현황')
-                        .setCustomId('btnResultNotParticipated')
-                        .setStyle(ButtonStyle.Secondary);
-
-                    // ActionRow를 두 줄로 분리
-                    const row1 = new ActionRowBuilder().addComponents(button, button1, button2);
-                    const row2 = new ActionRowBuilder().addComponents(button3, byGuildButton, button4);
-
-                    const embed = new EmbedBuilder()
-                        .setColor(0x5865f2) // 디스코드 브랜드 컬러로 변경
-                        .setTitle(`📢 공성/거점 투표`)
-                        .addFields(
-                            { name: '📅 일시', value: `\`${formattedDate}\``, inline: true },
-                            { name: '🗺️ 지역', value: `\`${selectedRegion}\``, inline: true },
-                            { name: '\u200B', value: '\u200B', inline: true }, // 빈 필드로 줄 맞춤
-                            {
-                                name: '📌 주의사항',
-                                value: '투표 인원이 몰리면 속도가 느려질 수 있습니다.\n투표를 여러번 누르면 순번이 밀려날 수 있으니 주의해주세요.',
-                            }
-                        )
-                        .setDescription(`${description}`)
-                        .setFooter({
-                            text: '상호작용 오류 발생 시 10초 후 다시 시도해주세요',
-                        });
-
-                    let message;
-
-                    if (isDevMode) {
-                        // 개발 모드: 명령어 실행자에게만 표시 (ephemeral)
-                        message = await modalInteraction.editReply({
-                            embeds: [embed],
-                            components: [row1, row2],
-                            fetchReply: true,
-                        });
-
-                        console.log('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
-                        logger.info('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
-                    } else {
-                        // 프로덕션 모드: 모든 사람에게 표시
-                        message = await modalInteraction.editReply({
-                            embeds: [embed],
-                            components: [row1, row2],
-                            fetchReply: true,
-                        });
-
-                        console.log('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
-                        logger.info('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
-                    }
-
-                    // 9. 투표가 활성화됨을 설정
-                    votingStatus.setVotingActiveStatus(true);
-                    // 10. 메시지 객체 저장
-                    votingStatus.setMessage(message);
-
-                    console.log(`투표가 시작되었습니다. ${eligibleMembers.size}명의 멤버가 초기화되었습니다.`);
-                    logger.info(`투표가 시작되었습니다. ${eligibleMembers.size}명의 멤버가 초기화되었습니다.`);
                 } catch (err) {
                     console.error('투표 초기화 중 오류 발생:', err);
                     logger.error('투표 초기화 중 오류 발생:', err);

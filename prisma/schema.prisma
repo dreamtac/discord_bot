@@ -33,6 +33,7 @@ model Vote {
   date        String
   region      String
   isActive    Boolean      @default(true)
+  startTime   DateTime     @default(now())
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   // 투표와 유저 투표 상태 간의 관계
