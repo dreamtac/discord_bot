@@ -124,7 +124,7 @@ module.exports = async interaction => {
                 if (activeVote && activeVote.startTime) {
                     const voteStartTime = new Date(activeVote.startTime);
                     const currentTime = new Date();
-                    const tenMinutesInMs = 10 * 60 * 100; // 10분을 밀리초로
+                    const tenMinutesInMs = 10 * 60 * 1000; // 10분을 밀리초로
                     const timeElapsed = currentTime.getTime() - voteStartTime.getTime();
 
                     // 일반 참여 버튼: 10분 전에는 차단

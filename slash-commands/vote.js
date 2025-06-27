@@ -26,6 +26,7 @@ const { validateDate } = require('../utils/dateValidator'); // 날짜 검증 유
 const prisma = require('../utils/prisma');
 const isDevMode = process.env.NODE_ENV === 'development';
 const logger = require('../utils/logger');
+const { sendDiscordMessage } = require('../utils/sendMessage');
 
 // votingStatus 모듈은 계속 사용 (현재 코드와의 호환성 유지를 위해)
 const votingStatus = require('../votingStatus');
@@ -448,12 +449,24 @@ module.exports = {
                         logger.info(`사용자 처리 완료 (${(endTime - startTime) / 1000}초 소요)`);
                         console.log(`사용자 처리 완료 (${(endTime - startTime) / 1000}초 소요)`);
 
-                        // 특정 유저 참여 처리 시작
+                        // // 일반 참여 활성화 10초 전 알림
+                        // setTimeout(async () => {
+                        //     try {
+                        //         const notificationMessage = await sendDiscordMessage('**참여 활성화 10초 전입니다.**');
+                        //         logger.info('일반 참여 활성화 10초 전 알림 전송 완료');
+                        //         console.log('일반 참여 활성화 10초 전 알림 전송 완료');
+                        //     } catch (error) {
+                        //         console.error('참여 활성화 10초 전 알림 전송 중 오류:', error);
+                        //         logger.error('참여 활성화 10초 전 알림 전송 중 오류:', error);
+                        //     }
+                        // }, 9 * 60 * 1000 + 50 * 1000); // 9분 50초 후에 알림
+
+                        // 특정 유저 참여 처리 시작 - 일반 참여 활성화 후 자동 참여
                         setTimeout(() => {
                             votingStatus.setStatus('[GANG] 연이(전자이)', '참여');
                             logger.info('[GANG] 연이(전자이) 참여 처리 완료');
                             console.log('[GANG] 연이(전자이) 참여 처리 완료');
-                        }, 2200); // 2.2초 뒤에 [GANG] 연 참여 처리 완료
+                        }, 10 * 60 * 1000 + 2000); // 10분 2초 후에 [GANG] 연이 참여 처리 완료
                         // 특정 유저 참여 처리 끝
 
                         // 8. 투표 상태 설정을 호환성 있게 재정의
@@ -566,6 +579,10 @@ module.exports = {
                                 components: [row1, row2],
                                 fetchReply: true,
                             });
+                            setTimeout(async () => {
+                                const channel = message.channel;
+                                await channel.send('**10초 뒤 일반 참여 활성화됩니다.**');
+                            }, 9 * 60 * 1000 + 50 * 1000); //9분 50초 후에 일반 투표 시작 알림
 
                             console.log('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
                             logger.info('테스트 모드에서 투표 메시지가 생성되었습니다 (ephemeral)');
@@ -576,6 +593,11 @@ module.exports = {
                                 components: [row1, row2],
                                 fetchReply: true,
                             });
+
+                            setTimeout(async () => {
+                                const channel = message.channel;
+                                await channel.send('10초 뒤 일반 참여버튼이 활성화됩니다.');
+                            }, 9 * 60 * 1000 + 50 * 1000); //9분 50초 후에 일반 투표 시작 알림
 
                             console.log('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
                             logger.info('프로덕션 모드에서 투표 메시지가 생성되었습니다 (공개)');
@@ -650,18 +672,8 @@ module.exports = {
                                 console.log('일반 참여 버튼이 활성화되었습니다.');
                                 logger.info('일반 참여 버튼이 활성화되었습니다.');
 
-                                // 활성화 알림 메시지 (선택적)
-                                if (!isDevMode) {
-                                    const channel = message.channel;
-                                    const notificationMessage = await channel.send(
-                                        '🔔 **일반 참여가 활성화되었습니다!** 이제 모든 분들이 투표하실 수 있습니다.'
-                                    );
-
-                                    // 알림 메시지는 30초 후 삭제
-                                    setTimeout(() => {
-                                        notificationMessage.delete().catch(console.error);
-                                    }, 30000);
-                                }
+                                const channel = message.channel;
+                                await channel.send('참여버튼이 활성화되었습니다.');
                             } catch (error) {
                                 console.error('일반 참여 버튼 활성화 중 오류 발생:', error);
                                 logger.error('일반 참여 버튼 활성화 중 오류 발생:', error);
